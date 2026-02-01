@@ -1,6 +1,6 @@
 # Digger
 
-**Digger** is the system monitor for [Colony](https://github.com/MotherSphere). Built with Rust and [Iced](https://iced.rs), it provides real-time visibility into your machine's health — CPU, memory, network, disk, GPU, and processes — with a clean, themeable interface.
+**Digger** is the system monitor for [Colony](https://github.com/Project-Colony/Colony). Built with Rust and [Iced](https://iced.rs), it provides real-time visibility into your machine's health — CPU, memory, network, disk, GPU, and processes — with a clean, themeable interface.
 
 ## What it does
 
@@ -28,14 +28,6 @@ The UI is organized into four tabs:
 ## Internationalization
 
 Digger supports **50 languages** with zero-cost static string tables compiled directly into the binary. Font selection adapts automatically to the active language:
-
-| Font | Coverage |
-|------|----------|
-| Iosevka Nerd Font | Latin, symbols (default) |
-| Sarasa Mono Nerd Font | Chinese, Japanese, Korean |
-| DejaVu Sans Mono NF | Arabic, Persian |
-| Noto Mono NF | Hindi, Bengali, Tamil, and other Indic scripts |
-| OpenDyslexic | Accessibility |
 
 ## Screenshots
 
