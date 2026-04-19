@@ -1,9 +1,4 @@
 {
   "name": "D1Gg2r",
-  "category": "Utilities",
-  "platforms": ["windows", "linux"],
-  "releaseFiles": {
-    "windows": { "tag": "Windows", "file": "Digger.exe" },
-    "linux": { "tag": "Linux", "file": "Digger" }
-  }
+  "category": "Utilities"
 }
