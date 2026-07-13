@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0 (2026-07-13)
+
+
+### Bug Fixes
+
+* hide console window flashes from GPU polling on Windows ([#4](https://github.com/Project-Colony/D1Gg2r/issues/4)) ([69e5423](https://github.com/Project-Colony/D1Gg2r/commit/69e542361137969f6523b69c8e8ce6787bab2497))
+
+## Changelog
+
 Future entries are generated automatically by
 [release-please](https://github.com/googleapis/release-please) from
 [Conventional Commits](https://www.conventionalcommits.org/).
