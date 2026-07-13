@@ -496,13 +496,19 @@ fn collect_nvidia_smi_windows() -> GpuSnapshot {
 
 #[cfg(target_os = "windows")]
 fn collect_nvidia_smi_windows_blocking() -> Vec<GpuInfo> {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
+    use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
 
+    // The app runs as a GUI subsystem binary with no console attached, so
+    // every spawned console process flashes a new cmd window on each poll
+    // unless CREATE_NO_WINDOW is set.
     let output = Command::new("nvidia-smi")
         .args([
             "--query-gpu=name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw",
             "--format=csv,noheader,nounits",
         ])
+        .creation_flags(CREATE_NO_WINDOW)
         .output();
 
     let output = match output {
