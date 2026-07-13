@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to rebuild assets for (leave empty for a build-only smoke run)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -13,6 +19,7 @@ env:
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -28,7 +35,7 @@ jobs:
   build:
     name: Build ${{ matrix.asset }}
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,6 +56,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -70,7 +79,8 @@ jobs:
         run: copy target\${{ matrix.target }}\release\digger.exe ${{ matrix.asset }}
 
       - name: Upload binary to GitHub Release
+        if: ${{ github.event_name == 'push' || inputs.tag != '' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
           files: ${{ matrix.asset }}
