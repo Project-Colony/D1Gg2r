@@ -111,7 +111,7 @@ pub const DYSLEXIC_FONT: iced::Font = iced::Font {
 
 fn main() -> iced::Result {
     let icon = iced::window::icon::from_file_data(
-        include_bytes!("ui/assets/icons/digger.png"),
+        include_bytes!("../assets/icons/icon.png"),
         None,
     )
     .ok();
