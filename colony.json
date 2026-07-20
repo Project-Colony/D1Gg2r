@@ -1,5 +1,6 @@
 {
   "name": "D1Gg2r",
   "category": "Utilities",
-  "icon": "assets/icons/icon.png"
+  "icon": "assets/icons/icon.png",
+  "signed": true
 }
