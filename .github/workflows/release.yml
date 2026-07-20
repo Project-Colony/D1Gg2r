@@ -25,7 +25,7 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         id: release
         with:
           release-type: rust
@@ -55,15 +55,15 @@ jobs:
             asset: d1gg2r-macos-x86
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch
         with:
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           key: ${{ matrix.target }}
 
@@ -80,7 +80,52 @@ jobs:
 
       - name: Upload binary to GitHub Release
         if: ${{ github.event_name == 'push' || inputs.tag != '' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
           files: ${{ matrix.asset }}
+
+  # Sign every release asset with the Project-Colony org key (ed25519).
+  # Colony >= 0.8.0 verifies these signatures on install and REFUSES a
+  # tampered asset; the job fails the release if the secret is missing so
+  # an unsigned release cannot ship silently.
+  sign:
+    name: Sign release assets
+    needs: [release-please, build]
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          mkdir dist
+          gh release download "$TAG" -R "${{ github.repository }}" --dir dist
+          # Metadata companions are not signable assets.
+          rm -f dist/*.sig dist/*.sha256 dist/*.txt dist/*.yml dist/*.json dist/*.asc
+
+      - name: Sign
+        env:
+          KEY: ${{ secrets.COLONY_SIGNING_KEY_PEM }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::COLONY_SIGNING_KEY_PEM is not available - the release would ship unsigned."
+            exit 1
+          fi
+          printf '%s' "$KEY" > /tmp/key.pem
+          chmod 600 /tmp/key.pem
+          pub=$(mktemp)
+          openssl pkey -in /tmp/key.pem -pubout -out "$pub"
+          for f in dist/*; do
+            openssl pkeyutl -sign -inkey /tmp/key.pem -rawin -in "$f" -out "$f.sig"
+            openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in "$f" -sigfile "$f.sig" >/dev/null
+            echo "signed $(basename "$f")"
+          done
+          rm -f /tmp/key.pem
+
+      - name: Upload signatures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh release upload "$TAG" dist/*.sig --clobber
