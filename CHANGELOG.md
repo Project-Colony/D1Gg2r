@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/Project-Colony/D1Gg2r/compare/v0.2.0...v0.2.1) (2026-08-01)
+
+
+### Bug Fixes
+
+* **ci:** tell gh which repository to upload the signatures to ([#12](https://github.com/Project-Colony/D1Gg2r/issues/12)) ([57a6817](https://github.com/Project-Colony/D1Gg2r/commit/57a6817f16c9f4ef1c665f7bc5af2f1a64559f7d))
+
 ## [0.2.0](https://github.com/Project-Colony/D1Gg2r/compare/v0.1.0...v0.2.0) (2026-08-01)
 
 
