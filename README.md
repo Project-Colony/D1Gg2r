@@ -39,4 +39,6 @@ Build instructions, architecture details, and configuration reference are in the
 
 ## License
 
-MIT
+Digger is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. The full text is in [LICENSE](LICENSE).
+
+The font files bundled under `src/ui/assets/fonts/` are third-party and remain under their own licenses.

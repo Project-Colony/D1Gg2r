@@ -1848,7 +1848,7 @@ impl Digger {
                 info_row(t.application, "Digger", p, self.ui_mono),
                 info_row(t.version, "0.1.0", p, self.ui_mono),
                 info_row(t.framework, "Iced 0.13 + Rust", p, self.ui_mono),
-                info_row(t.license, "MIT", p, self.ui_mono),
+                info_row(t.license, "GPL-3.0-or-later", p, self.ui_mono),
             ].spacing(6).into(),
             p,
             self.ui_mono,
