@@ -128,4 +128,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
-        run: gh release upload "$TAG" dist/*.sig --clobber
+        # -R is not optional here. This job has no `actions/checkout`, so there
+        # is no git repository for `gh` to infer the target from, and it dies
+        # with "not a git repository" AFTER the assets have been signed. The
+        # download step above already passes it; this one was missed, and the
+        # release shipped unsigned while the job that was meant to prevent
+        # exactly that reported the failure too late to stop it.
+        run: gh release upload "$TAG" -R "${{ github.repository }}" dist/*.sig --clobber
