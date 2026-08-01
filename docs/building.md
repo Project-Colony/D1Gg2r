@@ -14,8 +14,8 @@ sudo apt install pkg-config libfontconfig1-dev
 ## Build
 
 ```bash
-git clone https://github.com/MotherSphere/D1Gg2r-Private.git
-cd D1Gg2r-Private
+git clone https://github.com/Project-Colony/D1Gg2r.git
+cd D1Gg2r
 cargo build --release
 ```
 
