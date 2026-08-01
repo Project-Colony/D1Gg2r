@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/Project-Colony/D1Gg2r/compare/v0.1.0...v0.2.0) (2026-08-01)
+
+
+### Features
+
+* **ci:** sign release assets with the Project-Colony org key ([01b3d45](https://github.com/Project-Colony/D1Gg2r/commit/01b3d45f37892218408bd8b02ae27fc0d90f0b85))
+* declare signed releases in the manifest ([e977db5](https://github.com/Project-Colony/D1Gg2r/commit/e977db5088b59ef406999ebacb472c640b22f9fa))
+
 ## 0.1.0 (2026-07-13)
 
 
