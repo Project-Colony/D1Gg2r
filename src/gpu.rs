@@ -11,10 +11,10 @@
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::path::Path;
-#[cfg(target_os = "linux")]
-use std::sync::RwLock;
 #[cfg(target_os = "windows")]
 use std::sync::Mutex;
+#[cfg(target_os = "linux")]
+use std::sync::RwLock;
 use std::time::Instant;
 
 #[derive(Clone, Debug, Default)]
@@ -93,9 +93,7 @@ fn enrich_with_nvidia_smi(snap: &mut GpuSnapshot) {
     // Only bother if there's at least one GPU with missing data
     let needs_enrichment = snap.gpus.iter().any(|g| {
         g.name.contains("NVIDIA")
-            && (g.temperature == 0.0
-                || g.memory_total == 0
-                || g.power_watts == 0.0)
+            && (g.temperature == 0.0 || g.memory_total == 0 || g.power_watts == 0.0)
     });
     if !needs_enrichment {
         return;
@@ -293,8 +291,7 @@ fn read_gpu_name(device_path: &Path) -> String {
     if let Some(uevent) = read_sysfs_str(&device_path.join("uevent")) {
         for line in uevent.lines() {
             if let Some(driver) = line.strip_prefix("DRIVER=") {
-                let vendor =
-                    read_sysfs_str(&device_path.join("vendor")).unwrap_or_default();
+                let vendor = read_sysfs_str(&device_path.join("vendor")).unwrap_or_default();
                 let vendor_name = match vendor.as_str() {
                     "0x10de" => "NVIDIA",
                     "0x1002" => "AMD",
@@ -347,8 +344,8 @@ fn read_gpu_memory(card_path: &Path, device_path: &Path) -> (u64, u64) {
     // AMD: mem_info_vram_total / mem_info_vram_used
     let total = read_sysfs_str(&device_path.join("mem_info_vram_total"))
         .and_then(|v| v.parse::<u64>().ok());
-    let used = read_sysfs_str(&device_path.join("mem_info_vram_used"))
-        .and_then(|v| v.parse::<u64>().ok());
+    let used =
+        read_sysfs_str(&device_path.join("mem_info_vram_used")).and_then(|v| v.parse::<u64>().ok());
 
     if let (Some(t), Some(u)) = (total, used) {
         return (u, t);
@@ -529,8 +526,14 @@ fn collect_nvidia_smi_windows_blocking() -> Vec<GpuInfo> {
             name: fields[0].to_string(),
             temperature: fields[1].parse().unwrap_or(0.0),
             utilization: fields[2].parse().unwrap_or(0),
-            memory_used: fields[3].parse::<u64>().map(|m| m * 1024 * 1024).unwrap_or(0),
-            memory_total: fields[4].parse::<u64>().map(|m| m * 1024 * 1024).unwrap_or(0),
+            memory_used: fields[3]
+                .parse::<u64>()
+                .map(|m| m * 1024 * 1024)
+                .unwrap_or(0),
+            memory_total: fields[4]
+                .parse::<u64>()
+                .map(|m| m * 1024 * 1024)
+                .unwrap_or(0),
             power_watts: fields[5].parse().unwrap_or(0.0),
         });
     }
@@ -570,10 +573,7 @@ fn collect_wmi_gpu() -> GpuSnapshot {
     };
 
     // Spawn background thread for WMI (COM init must not be on the UI thread)
-    let already_running = WMI_GPU_REFRESH_RUNNING
-        .lock()
-        .map(|g| *g)
-        .unwrap_or(false);
+    let already_running = WMI_GPU_REFRESH_RUNNING.lock().map(|g| *g).unwrap_or(false);
 
     if !already_running {
         if let Ok(mut g) = WMI_GPU_REFRESH_RUNNING.lock() {
@@ -590,7 +590,9 @@ fn collect_wmi_gpu() -> GpuSnapshot {
         });
     }
 
-    GpuSnapshot { gpus: cached.unwrap_or_default() }
+    GpuSnapshot {
+        gpus: cached.unwrap_or_default(),
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -703,10 +705,7 @@ fn collect_wmi_gpu_native() -> Vec<GpuInfo> {
 
 /// Try to get GPU temperatures from various WMI sources.
 #[cfg(target_os = "windows")]
-fn enrich_gpu_temps_wmi(
-    default_con: &wmi::WMIConnection,
-    gpus: &mut [GpuInfo],
-) {
+fn enrich_gpu_temps_wmi(default_con: &wmi::WMIConnection, gpus: &mut [GpuInfo]) {
     use std::collections::HashMap;
     use wmi::{COMLibrary, Variant, WMIConnection};
 
@@ -806,8 +805,14 @@ mod tests {
         assert_eq!(fields[0], "NVIDIA GeForce RTX 2080 SUPER");
         assert_eq!(fields[1].parse::<f32>().unwrap(), 45.0);
         assert_eq!(fields[2].parse::<u32>().unwrap(), 3);
-        assert_eq!(fields[3].parse::<u64>().unwrap() * 1024 * 1024, 1024 * 1024 * 1024);
-        assert_eq!(fields[4].parse::<u64>().unwrap() * 1024 * 1024, 8192 * 1024 * 1024);
+        assert_eq!(
+            fields[3].parse::<u64>().unwrap() * 1024 * 1024,
+            1024 * 1024 * 1024
+        );
+        assert_eq!(
+            fields[4].parse::<u64>().unwrap() * 1024 * 1024,
+            8192 * 1024 * 1024
+        );
         assert_eq!(fields[5].parse::<f32>().unwrap(), 30.50);
     }
 }

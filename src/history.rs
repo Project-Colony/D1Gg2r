@@ -1,4 +1,4 @@
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::path::PathBuf;
 
 use crate::metrics::Snapshot;
@@ -125,7 +125,9 @@ impl History {
     /// Opt #11: Batch INSERT multiple snapshots in a single transaction.
     pub fn record_batch(&mut self, snapshots: &[&Snapshot]) {
         let Some(conn) = &self.conn else { return };
-        if snapshots.is_empty() { return; }
+        if snapshots.is_empty() {
+            return;
+        }
 
         let result = conn.execute_batch("BEGIN");
         if let Err(e) = result {
@@ -185,7 +187,9 @@ impl History {
     }
 
     pub fn load_range(&self, from: f64, to: f64) -> Vec<HistoryPoint> {
-        let Some(conn) = &self.conn else { return Vec::new() };
+        let Some(conn) = &self.conn else {
+            return Vec::new();
+        };
 
         let mut stmt = match conn.prepare(
             "SELECT timestamp, cpu, mem_used, mem_total, net_rx, net_tx
@@ -220,8 +224,15 @@ impl History {
 
     /// Load history with DB-side downsampling using bucket averaging.
     /// Returns at most `max_points` data points by grouping into time buckets.
-    pub fn load_range_downsampled(&self, from: f64, to: f64, max_points: usize) -> Vec<HistoryPoint> {
-        let Some(conn) = &self.conn else { return Vec::new() };
+    pub fn load_range_downsampled(
+        &self,
+        from: f64,
+        to: f64,
+        max_points: usize,
+    ) -> Vec<HistoryPoint> {
+        let Some(conn) = &self.conn else {
+            return Vec::new();
+        };
         if max_points == 0 {
             return Vec::new();
         }
@@ -268,7 +279,11 @@ impl History {
         }
     }
 
-    pub fn load_last_n_seconds_downsampled(&self, seconds: f64, max_points: usize) -> Vec<HistoryPoint> {
+    pub fn load_last_n_seconds_downsampled(
+        &self,
+        seconds: f64,
+        max_points: usize,
+    ) -> Vec<HistoryPoint> {
         let now = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
         self.load_range_downsampled(now - seconds, now, max_points)
     }
@@ -276,9 +291,13 @@ impl History {
     /// Export history within a time range to CSV format.
     /// Opt #12: Streams rows directly from the query to avoid loading all into memory.
     pub fn export_csv(&self, from: f64, to: f64) -> String {
-        let Some(conn) = &self.conn else { return String::new() };
+        let Some(conn) = &self.conn else {
+            return String::new();
+        };
 
-        let mut out = String::from("timestamp,cpu_percent,mem_used_bytes,mem_total_bytes,net_rx_bytes,net_tx_bytes\n");
+        let mut out = String::from(
+            "timestamp,cpu_percent,mem_used_bytes,mem_total_bytes,net_rx_bytes,net_tx_bytes\n",
+        );
         let mut stmt = match conn.prepare(
             "SELECT timestamp, cpu, mem_used, mem_total, net_rx, net_tx
              FROM snapshots WHERE timestamp >= ?1 AND timestamp <= ?2
@@ -302,7 +321,11 @@ impl History {
         if let Ok(rows) = rows {
             for row in rows.flatten() {
                 use std::fmt::Write;
-                let _ = writeln!(out, "{},{:.2},{},{},{},{}", row.0, row.1, row.2, row.3, row.4, row.5);
+                let _ = writeln!(
+                    out,
+                    "{},{:.2},{},{},{},{}",
+                    row.0, row.1, row.2, row.3, row.4, row.5
+                );
             }
         }
         out
@@ -311,7 +334,9 @@ impl History {
     /// Export history within a time range to JSON format.
     /// Opt #12: Streams rows directly from the query.
     pub fn export_json(&self, from: f64, to: f64) -> String {
-        let Some(conn) = &self.conn else { return String::from("[]") };
+        let Some(conn) = &self.conn else {
+            return String::from("[]");
+        };
 
         let mut stmt = match conn.prepare(
             "SELECT timestamp, cpu, mem_used, mem_total, net_rx, net_tx
@@ -338,7 +363,9 @@ impl History {
         if let Ok(rows) = rows {
             for row in rows.flatten() {
                 use std::fmt::Write;
-                if !first { out.push_str(",\n"); }
+                if !first {
+                    out.push_str(",\n");
+                }
                 first = false;
                 let _ = write!(
                     out,
@@ -368,7 +395,8 @@ mod tests {
                 net_tx INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_ts ON snapshots(timestamp);",
-        ).unwrap();
+        )
+        .unwrap();
         History {
             conn: Some(conn),
             retention_secs: 86400.0,
@@ -391,7 +419,10 @@ mod tests {
             swap_used: 0,
             swap_total: 0,
             disks: vec![],
-            disk_io: crate::metrics::DiskIoSnapshot { read_bytes: 0, write_bytes: 0 },
+            disk_io: crate::metrics::DiskIoSnapshot {
+                read_bytes: 0,
+                write_bytes: 0,
+            },
             net_rx_bytes: 1000,
             net_tx_bytes: 2000,
             net_interfaces: vec![],
@@ -445,7 +476,11 @@ mod tests {
         // At ts=1119: cutoff = 1119 - 50 = 1069, removes 1010..1068 (59 more points)
         // Should have ~51 points remaining (1069..1119)
         let points = db.load_range(0.0, 2000.0);
-        assert!(points.len() < 120, "expected fewer than 120 points after pruning, got {}", points.len());
+        assert!(
+            points.len() < 120,
+            "expected fewer than 120 points after pruning, got {}",
+            points.len()
+        );
         assert!(!points.is_empty());
     }
 

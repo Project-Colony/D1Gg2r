@@ -46,14 +46,26 @@ pub struct Preferences {
     pub language: Language,
 }
 
-fn default_process_limit() -> usize { 200 }
+fn default_process_limit() -> usize {
+    200
+}
 const MAX_PROCESS_LIMIT: usize = 5000;
 const REFRESH_OPTIONS: &[u64] = &[1, 2, 5];
-fn default_live_buffer_size() -> usize { 120 }
-fn default_retention_hours() -> u64 { 24 }
-fn default_cpu_alert_threshold() -> f32 { 90.0 }
-fn default_mem_alert_threshold() -> f32 { 90.0 }
-fn default_process_sort() -> String { "cpu".into() }
+fn default_live_buffer_size() -> usize {
+    120
+}
+fn default_retention_hours() -> u64 {
+    24
+}
+fn default_cpu_alert_threshold() -> f32 {
+    90.0
+}
+fn default_mem_alert_threshold() -> f32 {
+    90.0
+}
+fn default_process_sort() -> String {
+    "cpu".into()
+}
 
 impl Default for Preferences {
     fn default() -> Self {

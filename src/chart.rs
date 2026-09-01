@@ -39,7 +39,11 @@ pub struct LineChart {
 impl LineChart {
     /// Number of data points in the longest series.
     fn data_len(&self) -> usize {
-        self.series.iter().map(|(_, _, d)| d.len()).max().unwrap_or(0)
+        self.series
+            .iter()
+            .map(|(_, _, d)| d.len())
+            .max()
+            .unwrap_or(0)
     }
 }
 
@@ -124,8 +128,14 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
         frame.fill(&bg, c.bg);
 
         // Softer border
-        let border = Path::rectangle(Point::new(0.5, 0.5), Size::new(bounds.width - 1.0, bounds.height - 1.0));
-        frame.stroke(&border, Stroke::default().with_color(c.border).with_width(0.5));
+        let border = Path::rectangle(
+            Point::new(0.5, 0.5),
+            Size::new(bounds.width - 1.0, bounds.height - 1.0),
+        );
+        frame.stroke(
+            &border,
+            Stroke::default().with_color(c.border).with_width(0.5),
+        );
 
         // Title
         let mut title_text = Text::from(self.title.clone());
@@ -145,13 +155,14 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
                 let frac = 1.0 - (val - self.y_min) / y_range;
                 let y = pad_top + chart_h * frac;
 
-                let grid = Path::line(
-                    Point::new(pad_left, y),
-                    Point::new(pad_left + chart_w, y),
-                );
+                let grid = Path::line(Point::new(pad_left, y), Point::new(pad_left + chart_w, y));
                 frame.stroke(&grid, Stroke::default().with_color(c.grid).with_width(1.0));
 
-                let label_str = if step >= 1.0 { format!("{val:.0}") } else { format!("{val:.1}") };
+                let label_str = if step >= 1.0 {
+                    format!("{val:.0}")
+                } else {
+                    format!("{val:.1}")
+                };
                 let mut label = Text::from(label_str);
                 label.position = Point::new(4.0, y - 5.0);
                 label.color = c.label;
@@ -178,7 +189,11 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
                 builder.move_to(Point::new(pad_left, pad_top + chart_h));
                 for (i, &val) in data.iter().enumerate() {
                     let x = pad_left + (i as f32 / (dn - 1) as f32) * chart_w;
-                    let normalized = if y_range > 0.0 { (val - self.y_min) / y_range } else { 0.5 };
+                    let normalized = if y_range > 0.0 {
+                        (val - self.y_min) / y_range
+                    } else {
+                        0.5
+                    };
                     let y = pad_top + chart_h * (1.0 - normalized);
                     builder.line_to(Point::new(x, y));
                 }
@@ -193,7 +208,11 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
             let mut builder = canvas::path::Builder::new();
             for (i, &val) in data.iter().enumerate() {
                 let x = pad_left + (i as f32 / (dn - 1) as f32) * chart_w;
-                let normalized = if y_range > 0.0 { (val - self.y_min) / y_range } else { 0.5 };
+                let normalized = if y_range > 0.0 {
+                    (val - self.y_min) / y_range
+                } else {
+                    0.5
+                };
                 let y = pad_top + chart_h * (1.0 - normalized);
                 if i == 0 {
                     builder.move_to(Point::new(x, y));
@@ -204,7 +223,10 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
             let path = builder.build();
             // Glow pass: thicker, semi-transparent
             let glow_color = Color::from_rgba(color.r, color.g, color.b, 0.2);
-            frame.stroke(&path, Stroke::default().with_color(glow_color).with_width(4.0));
+            frame.stroke(
+                &path,
+                Stroke::default().with_color(glow_color).with_width(4.0),
+            );
             // Main line
             frame.stroke(&path, Stroke::default().with_color(*color).with_width(1.8));
         }
@@ -216,7 +238,11 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
                     continue;
                 }
                 let avg_val = data.iter().sum::<f32>() / data.len() as f32;
-                let normalized = if y_range > 0.0 { (avg_val - self.y_min) / y_range } else { 0.5 };
+                let normalized = if y_range > 0.0 {
+                    (avg_val - self.y_min) / y_range
+                } else {
+                    0.5
+                };
                 let y = pad_top + chart_h * (1.0 - normalized);
                 // Draw dashed line (alternating segments)
                 let dash_len = 6.0;
@@ -269,7 +295,11 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
                     }
                     let val = data[idx];
 
-                    let normalized = if y_range > 0.0 { (val - self.y_min) / y_range } else { 0.5 };
+                    let normalized = if y_range > 0.0 {
+                        (val - self.y_min) / y_range
+                    } else {
+                        0.5
+                    };
                     let dot_y = pad_top + chart_h * (1.0 - normalized);
 
                     // Outer glow ring on dot
@@ -304,9 +334,12 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
                     );
                     frame.fill(&box_path, Color::from_rgba(c.bg.r, c.bg.g, c.bg.b, 0.95));
                     // Subtle border on tooltip
-                    frame.stroke(&box_path, Stroke::default()
-                        .with_color(Color::from_rgba(color.r, color.g, color.b, 0.4))
-                        .with_width(0.8));
+                    frame.stroke(
+                        &box_path,
+                        Stroke::default()
+                            .with_color(Color::from_rgba(color.r, color.g, color.b, 0.4))
+                            .with_width(0.8),
+                    );
 
                     let mut tt = Text::from(tooltip_str);
                     tt.position = Point::new(tx, tooltip_y);
@@ -348,6 +381,14 @@ fn nice_tick_step(range: f32, max_ticks: usize) -> f32 {
     let rough = range / max_ticks as f32;
     let mag = 10f32.powf(rough.log10().floor());
     let norm = rough / mag;
-    let nice = if norm <= 1.0 { 1.0 } else if norm <= 2.0 { 2.0 } else if norm <= 5.0 { 5.0 } else { 10.0 };
+    let nice = if norm <= 1.0 {
+        1.0
+    } else if norm <= 2.0 {
+        2.0
+    } else if norm <= 5.0 {
+        5.0
+    } else {
+        10.0
+    };
     (nice * mag).max(f32::EPSILON)
 }

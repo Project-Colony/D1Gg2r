@@ -110,11 +110,8 @@ pub const DYSLEXIC_FONT: iced::Font = iced::Font {
 };
 
 fn main() -> iced::Result {
-    let icon = iced::window::icon::from_file_data(
-        include_bytes!("../assets/icons/icon.png"),
-        None,
-    )
-    .ok();
+    let icon =
+        iced::window::icon::from_file_data(include_bytes!("../assets/icons/icon.png"), None).ok();
 
     iced::application(Digger::title, Digger::update, Digger::view)
         .subscription(Digger::subscription)
