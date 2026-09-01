@@ -141,13 +141,17 @@ impl History {
             if let Err(e) = conn.execute(
                 "INSERT OR REPLACE INTO snapshots (timestamp, cpu, mem_used, mem_total, net_rx, net_tx)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                // SQLite's INTEGER is signed 64-bit, and rusqlite 0.40 stopped
+                // pretending u64 fits: the conversion was lossy past i64::MAX.
+                // These are byte counts and a CPU percentage, so the cast is
+                // exact for anything short of nine exabytes of RAM.
                 params![
                     snap.timestamp,
                     snap.cpu_usage_global,
-                    snap.memory_used,
-                    snap.memory_total,
-                    snap.net_rx_bytes,
-                    snap.net_tx_bytes,
+                    snap.memory_used as i64,
+                    snap.memory_total as i64,
+                    snap.net_rx_bytes as i64,
+                    snap.net_tx_bytes as i64,
                 ],
             ) {
                 eprintln!("[digger] Failed to record snapshot: {e}");
@@ -207,10 +211,10 @@ impl History {
             Ok(HistoryPoint {
                 timestamp: row.get(0)?,
                 cpu: row.get(1)?,
-                mem_used: row.get(2)?,
-                mem_total: row.get(3)?,
-                net_rx: row.get(4)?,
-                net_tx: row.get(5)?,
+                mem_used: row.get::<_, i64>(2)? as u64,
+                mem_total: row.get::<_, i64>(3)? as u64,
+                net_rx: row.get::<_, i64>(4)? as u64,
+                net_tx: row.get::<_, i64>(5)? as u64,
             })
         });
         match result {
@@ -264,10 +268,10 @@ impl History {
             Ok(HistoryPoint {
                 timestamp: row.get(0)?,
                 cpu: row.get(1)?,
-                mem_used: row.get(2)?,
-                mem_total: row.get(3)?,
-                net_rx: row.get(4)?,
-                net_tx: row.get(5)?,
+                mem_used: row.get::<_, i64>(2)? as u64,
+                mem_total: row.get::<_, i64>(3)? as u64,
+                net_rx: row.get::<_, i64>(4)? as u64,
+                net_tx: row.get::<_, i64>(5)? as u64,
             })
         });
         match result {
@@ -311,10 +315,10 @@ impl History {
             Ok((
                 row.get::<_, f64>(0)?,
                 row.get::<_, f32>(1)?,
-                row.get::<_, u64>(2)?,
-                row.get::<_, u64>(3)?,
-                row.get::<_, u64>(4)?,
-                row.get::<_, u64>(5)?,
+                row.get::<_, i64>(2)? as u64,
+                row.get::<_, i64>(3)? as u64,
+                row.get::<_, i64>(4)? as u64,
+                row.get::<_, i64>(5)? as u64,
             ))
         });
 
@@ -351,10 +355,10 @@ impl History {
             Ok((
                 row.get::<_, f64>(0)?,
                 row.get::<_, f32>(1)?,
-                row.get::<_, u64>(2)?,
-                row.get::<_, u64>(3)?,
-                row.get::<_, u64>(4)?,
-                row.get::<_, u64>(5)?,
+                row.get::<_, i64>(2)? as u64,
+                row.get::<_, i64>(3)? as u64,
+                row.get::<_, i64>(4)? as u64,
+                row.get::<_, i64>(5)? as u64,
             ))
         });
 

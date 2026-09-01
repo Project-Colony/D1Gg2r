@@ -102,8 +102,8 @@ impl<Message: 'static> canvas::Program<Message> for RadialGauge {
         val_text.color = c.text;
         val_text.size = (radius * 0.45).max(12.0).into();
         val_text.font = NERD_FONT_MONO;
-        val_text.horizontal_alignment = iced::alignment::Horizontal::Center;
-        val_text.vertical_alignment = iced::alignment::Vertical::Center;
+        val_text.align_x = iced::widget::text::Alignment::Center;
+        val_text.align_y = iced::alignment::Vertical::Center;
         frame.fill_text(val_text);
 
         // Label below
@@ -112,8 +112,8 @@ impl<Message: 'static> canvas::Program<Message> for RadialGauge {
         label_text.color = c.label;
         label_text.size = (radius * 0.2).max(9.0).into();
         label_text.font = NERD_FONT;
-        label_text.horizontal_alignment = iced::alignment::Horizontal::Center;
-        label_text.vertical_alignment = iced::alignment::Vertical::Center;
+        label_text.align_x = iced::widget::text::Alignment::Center;
+        label_text.align_y = iced::alignment::Vertical::Center;
         frame.fill_text(label_text);
 
         vec![frame.into_geometry()]

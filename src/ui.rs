@@ -476,8 +476,14 @@ impl Digger {
             .map(|_| Message::Tick);
         let anim_tick =
             iced::time::every(Duration::from_millis(ANIM_TICK_MS)).map(|_| Message::AnimTick);
-        let keys =
-            keyboard::on_key_press(|key, modifiers| Some(Message::KeyPressed(key, modifiers)));
+        // 0.14 dropped the on_key_press helper: listen() yields every keyboard
+        // event and the caller picks. Same behaviour, one more line.
+        let keys = keyboard::listen().filter_map(|event| match event {
+            keyboard::Event::KeyPressed { key, modifiers, .. } => {
+                Some(Message::KeyPressed(key, modifiers))
+            }
+            _ => None,
+        });
         Subscription::batch([data_tick, anim_tick, keys])
     }
 
@@ -1140,7 +1146,7 @@ impl Digger {
         let beat = self.heart_phase.sin().max(0.0).powi(2);
         let heart_size = 10.0 + beat * 4.0; // 10px base, up to 14px on beat
         let health_el: Element<Message> = row![
-            container(text(ICON_HEART).size(heart_size as u16).color(heart_color))
+            container(text(ICON_HEART).size(heart_size).color(heart_color))
                 .width(16)
                 .height(16)
                 .align_x(Alignment::Center)
@@ -1159,7 +1165,7 @@ impl Digger {
             let warning_color = p.yellow;
             text(msg).size(10).color(warning_color).into()
         } else {
-            Space::new(0, 0).into()
+            Space::new().into()
         };
 
         // Event log badge
@@ -1182,22 +1188,22 @@ impl Digger {
             .align_y(Alignment::Center)
             .into()
         } else {
-            Space::new(0, 0).into()
+            Space::new().into()
         };
 
         let menu_bar = row![
             digger_btn,
-            Space::with_width(8),
+            Space::new().width(8),
             health_el,
-            Space::with_width(6),
+            Space::new().width(6),
             event_badge,
-            Space::with_width(8),
+            Space::new().width(8),
             text(ICON_SEPARATOR).size(14).color(border_c),
-            Space::with_width(8),
+            Space::new().width(8),
             status_el,
-            Space::with_width(Length::Fill),
+            Space::new().width(Length::Fill),
             tabs,
-            Space::with_width(Length::Fill),
+            Space::new().width(Length::Fill),
             text(chrono::Local::now().format("%H:%M:%S").to_string())
                 .size(13)
                 .font(self.ui_mono)
@@ -1245,7 +1251,7 @@ impl Digger {
                 .size(13)
                 .font(self.ui_mono)
                 .color(p.accent),
-            Space::with_width(Length::Fill),
+            Space::new().width(Length::Fill),
             text(format!("{} {}", self.event_log.len(), t.events))
                 .size(11)
                 .font(self.ui_mono)
@@ -1482,7 +1488,7 @@ impl Digger {
             t.monitoring_desc,
             self.collapsed_sections
                 .contains(&SettingsSection::Monitoring),
-            column![refresh_row, Space::with_height(12), temp_row,].into(),
+            column![refresh_row, Space::new().height(12), temp_row,].into(),
             p,
             self.ui_mono,
         );
@@ -1557,9 +1563,9 @@ impl Digger {
             self.collapsed_sections.contains(&SettingsSection::Display),
             column![
                 process_limit_row,
-                Space::with_height(12),
+                Space::new().height(12),
                 history_points_row,
-                Space::with_height(12),
+                Space::new().height(12),
                 retention_row,
             ]
             .into(),
@@ -1599,7 +1605,7 @@ impl Digger {
 
         // Show DB error if any
         if let Some(err) = &self.history.last_error {
-            data_items.push(Space::with_height(6).into());
+            data_items.push(Space::new().height(6).into());
             data_items.push(
                 text(format!("{ICON_WARNING} {err}"))
                     .size(10)
@@ -1659,7 +1665,7 @@ impl Digger {
                 ]
                 .align_y(Alignment::Center)
                 .spacing(12),
-                Space::with_height(12),
+                Space::new().height(12),
                 row![
                     column![
                         text(t.memory_threshold)
@@ -1685,13 +1691,13 @@ impl Digger {
 
         column![
             title,
-            Space::with_height(16),
+            Space::new().height(16),
             monitoring_section,
-            Space::with_height(6),
+            Space::new().height(6),
             display_section,
-            Space::with_height(6),
+            Space::new().height(6),
             data_section,
-            Space::with_height(6),
+            Space::new().height(6),
             alerts_section,
         ]
         .spacing(4)
@@ -1748,7 +1754,7 @@ impl Digger {
         let mut theme_items: Vec<Element<Message>> = Vec::new();
         for (family_name, variants) in families {
             theme_items.push(text(*family_name).size(13).color(text_c).into());
-            theme_items.push(Space::with_height(2).into());
+            theme_items.push(Space::new().height(2).into());
             let mut variant_btns: Vec<Element<Message>> = Vec::new();
             for &variant in *variants {
                 let is_active = self.theme_variant == variant;
@@ -1782,7 +1788,7 @@ impl Digger {
                 let card = container(
                     column![
                         // Top: panel bg strip
-                        container(Space::new(Length::Fill, 6))
+                        container(Space::new().width(Length::Fill).height(6))
                             .width(Length::Fill)
                             .style(move |_: &Theme| container::Style {
                                 background: Some(Background::Color(pv_panel)),
@@ -1826,7 +1832,7 @@ impl Digger {
                 variant_btns.push(btn.into());
             }
             theme_items.push(Row::with_children(variant_btns).spacing(8).into());
-            theme_items.push(Space::with_height(10).into());
+            theme_items.push(Space::new().height(10).into());
         }
 
         let theme_section = collapsible_section(
@@ -1854,7 +1860,7 @@ impl Digger {
             let label_el: Element<Message> = if is_active {
                 text(ICON_CHECK).size(12).color(check_color).into()
             } else {
-                Space::new(0, 0).into()
+                Space::new().into()
             };
 
             let btn = button(
@@ -1913,7 +1919,7 @@ impl Digger {
             .size(11)
             .font(self.ui_mono)
             .color(accent),
-            Space::with_width(12),
+            Space::new().width(12),
             text(format!(
                 "{ICON_BULLET} Accent: {}",
                 self.accent_color.name()
@@ -1941,11 +1947,11 @@ impl Digger {
 
         column![
             title,
-            Space::with_height(8),
+            Space::new().height(8),
             current_info,
-            Space::with_height(12),
+            Space::new().height(12),
             theme_section,
-            Space::with_height(6),
+            Space::new().height(6),
             accent_section,
         ]
         .spacing(4)
@@ -2024,7 +2030,7 @@ impl Digger {
             self.ui_mono,
         );
 
-        column![title, Space::with_height(16), font_section,]
+        column![title, Space::new().height(16), font_section,]
             .spacing(4)
             .into()
     }
@@ -2060,7 +2066,7 @@ impl Digger {
                     .color(accent)
                     .font(font_for_lang(self.language))
             },
-            Space::with_width(8),
+            Space::new().width(8),
             text(format!("({})", self.language.code()))
                 .size(11)
                 .color(label_c),
@@ -2115,12 +2121,12 @@ impl Digger {
                     let check: Element<Message> = if is_active {
                         text(ICON_CHECK).size(11).color(lang_accent).into()
                     } else {
-                        Space::new(11, 0).into()
+                        Space::new().into()
                     };
 
                     let content = row![
                         check,
-                        Space::with_width(4),
+                        Space::new().width(4),
                         column![
                             {
                                 let name_color = if is_active { lang_accent } else { lang_text_c };
@@ -2163,7 +2169,7 @@ impl Digger {
                         });
                     cols.push(container(btn).width(Length::FillPortion(1)).into());
                 } else {
-                    cols.push(Space::with_width(Length::FillPortion(1)).into());
+                    cols.push(Space::new().width(Length::FillPortion(1)).into());
                 }
             }
             grid_rows.push(Row::with_children(cols).spacing(6).into());
@@ -2172,9 +2178,9 @@ impl Digger {
 
         column![
             title,
-            Space::with_height(8),
+            Space::new().height(8),
             current_info,
-            Space::with_height(12),
+            Space::new().height(12),
             grid,
         ]
         .spacing(4)
@@ -2270,11 +2276,11 @@ impl Digger {
 
         column![
             title,
-            Space::with_height(16),
+            Space::new().height(16),
             version_section,
-            Space::with_height(8),
+            Space::new().height(8),
             font_section,
-            Space::with_height(8),
+            Space::new().height(8),
             system_section,
         ]
         .spacing(4)
@@ -2388,7 +2394,7 @@ impl Digger {
                     self.ui_mono,
                 ),
                 // Load Average (small display at bottom of sidebar)
-                Space::with_height(Length::Fill),
+                Space::new().height(Length::Fill),
                 text(format!("{ICON_LOAD} {}", t.load))
                     .size(10)
                     .font(self.ui_mono)
@@ -2542,7 +2548,7 @@ impl Digger {
                     .align_y(Alignment::Center);
                     cols.push(container(core).width(Length::FillPortion(1)).into());
                 } else {
-                    cols.push(Space::with_width(Length::FillPortion(1)).into());
+                    cols.push(Space::new().width(Length::FillPortion(1)).into());
                 }
             }
             grid_rows.push(Row::with_children(cols).spacing(8).into());
@@ -2580,12 +2586,12 @@ impl Digger {
                 row![cpu_gauge, column![cpu_chart].width(Length::Fill),]
                     .spacing(6)
                     .align_y(Alignment::Center),
-                Space::with_height(4),
+                Space::new().height(4),
                 Element::from(load_info),
-                Space::with_height(6),
+                Space::new().height(6),
                 section_title(t.per_core_usage, p, self.ui_mono),
                 cores_grid,
-                Space::with_height(6),
+                Space::new().height(6),
                 section_title(t.system_info, p, self.ui_mono),
                 info,
             ]
@@ -2718,12 +2724,12 @@ impl Digger {
                 row![mem_gauge, column![mem_chart].width(Length::Fill),]
                     .spacing(6)
                     .align_y(Alignment::Center),
-                Space::with_height(8),
+                Space::new().height(8),
                 bars,
-                Space::with_height(8),
+                Space::new().height(8),
                 section_title("RAM", p, self.ui_mono),
                 info,
-                Space::with_height(8),
+                Space::new().height(8),
                 section_title(t.swap, p, self.ui_mono),
                 swap_info,
             ]
@@ -2820,10 +2826,10 @@ impl Digger {
         panel(
             column![
                 net_chart,
-                Space::with_height(8),
+                Space::new().height(8),
                 section_title(t.throughput, p, self.ui_mono),
                 totals,
-                Space::with_height(8),
+                Space::new().height(8),
                 section_title(t.interfaces, p, self.ui_mono),
                 Column::with_children(iface_items).spacing(3),
             ]
@@ -2918,36 +2924,36 @@ impl Digger {
                 column![
                     row![
                         text(format!("{icon} {}", &d.mount)).size(14).color(text_c),
-                        Space::with_width(Length::Fill),
+                        Space::new().width(Length::Fill),
                         text(format!("{} {ICON_BULLET} {}", &d.name, disk_type))
                             .size(10)
                             .color(label_c),
                     ],
-                    Space::with_height(6),
+                    Space::new().height(6),
                     themed_bar(pct, color, bar_bg),
-                    Space::with_height(6),
+                    Space::new().height(6),
                     row![
                         text(format!("{:.1}%", pct))
                             .size(14)
                             .font(self.ui_mono)
                             .color(color),
-                        Space::with_width(Length::Fill),
+                        Space::new().width(Length::Fill),
                         text(format!("{} {}", format_bytes(used), t.used))
                             .size(11)
                             .font(self.ui_mono)
                             .color(text_c),
-                        Space::with_width(12),
+                        Space::new().width(12),
                         text(format!("{} {}", format_bytes(d.available), t.free))
                             .size(11)
                             .font(self.ui_mono)
                             .color(green),
-                        Space::with_width(12),
+                        Space::new().width(12),
                         text(format!("{} {}", format_bytes(d.total), t.total))
                             .size(11)
                             .font(self.ui_mono)
                             .color(label_c),
                     ],
-                    Space::with_height(8),
+                    Space::new().height(8),
                     row![
                         column![
                             info_row(t.file_system, &d.fs_type, p, self.ui_mono),
@@ -3012,10 +3018,10 @@ impl Digger {
             column![
                 section_title(&disk_title, p, self.ui_mono),
                 summary,
-                Space::with_height(8),
+                Space::new().height(8),
                 section_title(t.io_throughput, p, self.ui_mono),
                 disk_io_info,
-                Space::with_height(8),
+                Space::new().height(8),
                 Column::with_children(disk_items).spacing(8),
             ]
             .spacing(4)
@@ -3127,7 +3133,7 @@ impl Digger {
             column![
                 section_title(&temp_overview_title, p, self.ui_mono),
                 summary,
-                Space::with_height(8),
+                Space::new().height(8),
                 section_title(t.all_sensors, p, self.ui_mono),
                 Column::with_children(temp_items).spacing(0),
             ]
@@ -3175,7 +3181,7 @@ impl Digger {
             gpu_items.push(
                 column![
                     text(&gpu.name).size(14).color(text_c),
-                    Space::with_height(4),
+                    Space::new().height(4),
                     info_row(
                         t.utilization,
                         format!("{}%", gpu.utilization),
@@ -3200,7 +3206,7 @@ impl Digger {
                     ),
                     info_row(t.vram_usage, format!("{:.1}%", mem_pct), p, self.ui_mono),
                     info_row(t.power, format!("{:.1}W", gpu.power_watts), p, self.ui_mono),
-                    Space::with_height(4),
+                    Space::new().height(4),
                     labeled_bar(
                         "Util",
                         gpu.utilization as u64,
@@ -3277,11 +3283,11 @@ impl Digger {
                 .size(11)
                 .font(self.ui_mono)
                 .color(label_c),
-            Space::with_width(4),
+            Space::new().width(4),
             text_input(t.search, &self.process_filter)
                 .on_input(Message::ProcessFilterChanged)
                 .width(220),
-            Space::with_width(12),
+            Space::new().width(12),
             button(
                 text(format!("{ICON_BARS} {group_label}"))
                     .size(11)
@@ -3291,7 +3297,7 @@ impl Digger {
             .on_press(Message::ToggleGrouped)
             .style(button::secondary)
             .padding([3, 10]),
-            Space::with_width(Length::Fill),
+            Space::new().width(Length::Fill),
             text(format!(
                 "{ICON_LIST} {} {}",
                 snap.processes.len(),
@@ -3526,7 +3532,7 @@ impl Digger {
                 .color(label_c)
                 .into(),
         );
-        range_btns.push(Space::with_width(4).into());
+        range_btns.push(Space::new().width(4).into());
         for (i, (_, label)) in HISTORY_RANGES.iter().enumerate() {
             let is_active = self.history_range_idx == i;
             let color = if is_active { accent } else { label_c };
@@ -3542,7 +3548,7 @@ impl Digger {
         }
 
         // Export buttons
-        range_btns.push(Space::with_width(Length::Fill).into());
+        range_btns.push(Space::new().width(Length::Fill).into());
         range_btns.push(
             button(text(format!("{ICON_EXPORT} CSV")).size(11).color(label_c))
                 .on_press(Message::ExportCsv)
@@ -3564,7 +3570,7 @@ impl Digger {
             return panel(
                 column![
                     range_row,
-                    Space::with_height(20),
+                    Space::new().height(20),
                     container(
                         text(format!("{ICON_HISTORY} {}", t.no_history_data))
                             .size(13)
@@ -3572,7 +3578,7 @@ impl Digger {
                             .color(label_c)
                     )
                     .center_x(Length::Fill),
-                    Space::with_height(20),
+                    Space::new().height(20),
                 ]
                 .spacing(4)
                 .into(),
@@ -3720,7 +3726,7 @@ fn themed_bar(value: f32, color: Color, bar_bg: Color) -> Element<'static, Messa
         color.a,
     );
     progress_bar(0.0..=100.0, value)
-        .width(Length::Fill)
+        .length(Length::Fill)
         .style(move |_: &Theme| progress_bar::Style {
             background: Background::Color(bar_bg),
             bar: Background::Color(bar_color),
@@ -3834,6 +3840,8 @@ fn sidebar_item<'a>(
                 } else {
                     Shadow::default()
                 },
+
+                ..Default::default()
             }
         })
         .into()
@@ -3895,6 +3903,8 @@ fn settings_sidebar_item(
             } else {
                 Shadow::default()
             },
+
+            ..Default::default()
         }
     })
     .into()
@@ -3929,7 +3939,7 @@ fn collapsible_section<'a>(
     let header = button(
         row![
             text(title_str).size(13).font(mono_font).color(text_c),
-            Space::with_width(Length::Fill),
+            Space::new().width(Length::Fill),
             text(chevron).size(12).color(label_c),
         ]
         .align_y(Alignment::Center),
@@ -3955,6 +3965,8 @@ fn collapsible_section<'a>(
                 offset: Vector::new(0.0, 1.0),
                 blur_radius: 3.0,
             },
+
+            ..Default::default()
         }
     });
 
@@ -3965,7 +3977,7 @@ fn collapsible_section<'a>(
     let mut body_items: Vec<Element<Message>> = Vec::new();
     if !desc_str.is_empty() {
         body_items.push(text(desc_str).size(10).color(label_c).into());
-        body_items.push(Space::with_height(10).into());
+        body_items.push(Space::new().height(10).into());
     }
     body_items.push(content);
 
@@ -4071,6 +4083,8 @@ fn process_row<'a>(
             },
             text_color: Some(text_c),
             shadow: Shadow::default(),
+
+            ..Default::default()
         })
         .padding(6)
         .into()
@@ -4263,7 +4277,7 @@ fn sort_btn(
         .on_press(Message::SortBy(col))
         .style(button::text)
         .padding([2, 4])
-        .width(width)
+        .width(Length::Fixed(f32::from(width)))
         .into()
 }
 

@@ -53,16 +53,16 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
     fn update(
         &self,
         state: &mut Self::State,
-        event: Event,
+        event: &Event,
         bounds: Rectangle,
         cursor: mouse::Cursor,
-    ) -> (canvas::event::Status, Option<Message>) {
+    ) -> Option<canvas::Action<Message>> {
         let pad_left = 44.0f32;
         let pad_right = 8.0f32;
         let chart_w = bounds.width - pad_left - pad_right;
         let n = self.data_len();
 
-        let new_idx = match &event {
+        let new_idx = match event {
             Event::Mouse(iced::mouse::Event::CursorMoved { .. }) => {
                 if let Some(pos) = cursor.position_in(bounds) {
                     if n >= 2 && chart_w > 0.0 && pos.x >= pad_left && pos.x <= pad_left + chart_w {
@@ -77,14 +77,18 @@ impl<Message: 'static> canvas::Program<Message> for LineChart {
                 }
             }
             Event::Mouse(iced::mouse::Event::CursorLeft) => None,
-            _ => return (canvas::event::Status::Ignored, None),
+            _ => return None,
         };
 
-        // Only update state (and thus invalidate cache) when the index actually changes.
-        if new_idx != state.hover_idx {
-            state.hover_idx = new_idx;
+        // Only redraw when the hovered point actually changes. 0.13 returned a
+        // Status and iced redrew regardless; 0.14 asks, so saying nothing on an
+        // unchanged index is what keeps the chart from repainting on every
+        // mouse move across it.
+        if new_idx == state.hover_idx {
+            return None;
         }
-        (canvas::event::Status::Ignored, None)
+        state.hover_idx = new_idx;
+        Some(canvas::Action::request_redraw())
     }
 
     fn mouse_interaction(

@@ -596,28 +596,33 @@ impl Collector {
         let cpu_refresh = if self.tick_count % 10 == 0 {
             CpuRefreshKind::everything()
         } else {
-            CpuRefreshKind::new().with_cpu_usage()
+            CpuRefreshKind::nothing().with_cpu_usage()
         };
 
         // Opt #1: Only refresh process fields we need (cpu, memory, disk usage).
-        let proc_refresh = ProcessRefreshKind::new()
+        let proc_refresh = ProcessRefreshKind::nothing()
             .with_cpu()
             .with_memory()
             .with_disk_usage();
 
         self.sys.refresh_specifics(
-            RefreshKind::new()
+            RefreshKind::nothing()
                 .with_cpu(cpu_refresh)
                 .with_memory(MemoryRefreshKind::everything())
                 .with_processes(proc_refresh),
         );
-        self.networks.refresh();
-        self.components.refresh();
+        // sysinfo 0.39 merged refresh() and refresh_list() into one call: the
+        // flag says whether to drop entries that have gone. The old refresh()
+        // kept them, so `false` preserves the behaviour — an interface that
+        // disappears mid-session stops updating rather than vanishing from the
+        // display.
+        self.networks.refresh(false);
+        self.components.refresh(false);
 
         // Opt #9: Only rebuild DiskInfo every 30 ticks (disks rarely change).
         if self.tick_count - self.disks_last_refresh >= 30 {
             self.disks_last_refresh = self.tick_count;
-            self.disks.refresh();
+            self.disks.refresh(true);
             self.cached_disks = self
                 .disks
                 .iter()
@@ -632,7 +637,7 @@ impl Collector {
                 .collect();
         } else {
             // Just refresh available space (cheap)
-            self.disks.refresh();
+            self.disks.refresh(true);
             for (cached, live) in self.cached_disks.iter_mut().zip(self.disks.iter()) {
                 cached.available = live.available_space();
             }
@@ -661,9 +666,15 @@ impl Collector {
         let mut temperatures: Vec<TempInfo> = self
             .components
             .iter()
-            .map(|c| TempInfo {
-                label: c.label().to_string(),
-                temp_c: c.temperature(),
+            // sysinfo 0.39 returns Option: a component can exist without a
+            // readable sensor. Dropping those is right — a missing reading shown
+            // as 0 °C reads as "very cold" rather than "unknown", and this list
+            // is what the temperature panel displays.
+            .filter_map(|c| {
+                c.temperature().map(|temp_c| TempInfo {
+                    label: c.label().to_string(),
+                    temp_c,
+                })
             })
             .collect();
 
