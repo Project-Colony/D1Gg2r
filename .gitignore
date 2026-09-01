@@ -1,0 +1,7 @@
+# Build output. This was never ignored, so `target/` has been tracked since the
+# repository began — including 300 MB binaries that GitHub refuses outright.
+/target
+**/*.rs.bk
+
+# Local editor and OS noise
+.DS_Store
