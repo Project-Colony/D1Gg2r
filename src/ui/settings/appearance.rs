@@ -21,7 +21,7 @@ impl Digger {
                 .font(self.typo.regular)
                 .color(p.label),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         // The picker renders every family colony-ui ships — fifty-nine variants
         // where Digger used to hardcode eleven — and draws each card from the
@@ -81,7 +81,7 @@ impl Digger {
             Space::new().height(6),
             typography_section,
         ]
-        .spacing(4)
+        .spacing(SPACE_XS)
         .into()
     }
 }

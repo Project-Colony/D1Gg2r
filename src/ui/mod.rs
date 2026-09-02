@@ -6,11 +6,13 @@ use iced::{Alignment, Background, Element, Length, Theme};
 use crate::icons::*;
 use crate::message::*;
 use crate::state::*;
+use crate::ui::layout::*;
 use crate::ui::widgets::*;
 
 pub mod detail;
 pub mod events;
 pub mod history;
+pub mod layout;
 pub mod overview;
 pub mod processes;
 pub mod settings;
@@ -49,7 +51,7 @@ impl Digger {
                 &self.typo
             ),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         let digger_label = if self.show_settings {
             &self.cached_digger_label_settings
@@ -60,7 +62,7 @@ impl Digger {
         let digger_btn = button(text(digger_label).size(self.typo.sz(15)).color(accent))
             .on_press(Message::ToggleSettings)
             .style(button::text)
-            .padding([2, 4]);
+            .padding(PAD_TIGHT);
 
         let border_c = p.border;
         let text_c = p.text;
@@ -148,7 +150,7 @@ impl Digger {
                 .color(text_c),
         ]
         .align_y(Alignment::Center)
-        .padding([6, 12]);
+        .padding(PAD_ROW);
 
         let content: Element<Message> = if self.show_settings {
             self.view_settings()

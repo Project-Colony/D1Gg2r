@@ -21,7 +21,7 @@ impl Digger {
                 .font(self.typo.regular)
                 .color(p.label),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         let vision = self.section(
             SettingsSection::Vision,
@@ -86,7 +86,7 @@ impl Digger {
             Space::new().height(6),
             fonts,
         ]
-        .spacing(4)
+        .spacing(SPACE_XS)
         .into()
     }
 }

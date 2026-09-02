@@ -22,7 +22,7 @@ impl Digger {
                 .font(self.typo.regular)
                 .color(label_c),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         let version_section = self.section(
             SettingsSection::Version,
@@ -34,7 +34,7 @@ impl Digger {
                 info_row(t.framework, ICED_VERSION, p, &self.typo),
                 info_row(t.license, "GPL-3.0-or-later", p, &self.typo),
             ]
-            .spacing(6)
+            .spacing(SPACE_SM)
             .into(),
         );
 
@@ -48,7 +48,7 @@ impl Digger {
                 info_row(t.dyslexic_font_label, "OpenDyslexic", p, &self.typo),
                 info_row(t.nerd_fonts, "v3.4.0", p, &self.typo),
             ]
-            .spacing(6)
+            .spacing(SPACE_SM)
             .into(),
         );
 
@@ -63,7 +63,7 @@ impl Digger {
                 info_row(t.cores, snap.cpu_core_count.to_string(), p, &self.typo),
                 info_row(t.total_ram, format_bytes(snap.memory_total), p, &self.typo),
             ]
-            .spacing(6)
+            .spacing(SPACE_SM)
         } else {
             column![text(t.waiting_for_data)
                 .size(self.typo.sz(11))
@@ -87,7 +87,7 @@ impl Digger {
             Space::new().height(8),
             system_section,
         ]
-        .spacing(4)
+        .spacing(SPACE_XS)
         .into()
     }
 

@@ -2,11 +2,12 @@
 //! inside a category shares.
 
 use iced::widget::{button, column, container, row, scrollable, text, Row, Space};
-use iced::{Background, Border, Color, Element, Length, Shadow, Theme, Vector};
+use iced::{Background, Border, Color, Element, Length, Theme};
 
 use crate::icons::*;
 use crate::message::*;
 use crate::state::*;
+use crate::ui::layout::*;
 use crate::ui::widgets::*;
 
 pub mod about;
@@ -59,7 +60,7 @@ impl Digger {
                     &self.typo,
                 ),
             ]
-            .spacing(2)
+            .spacing(SPACE_2XS)
             .padding(8),
         )
         .width(170)
@@ -70,11 +71,6 @@ impl Digger {
                 color: border_c,
                 width: 1.0,
                 radius: 0.0.into(),
-            },
-            shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.12),
-                offset: Vector::new(2.0, 0.0),
-                blur_radius: 8.0,
             },
             ..Default::default()
         });
@@ -165,14 +161,14 @@ impl Digger {
                         .color(fg),
                 )
                 .on_press(on_select(idx))
-                .padding([6, 12])
+                .padding(PAD_ROW)
                 .style(move |_: &Theme, _status| button::Style {
                     background: Some(Background::Color(bg)),
                     text_color: fg,
                     border: Border {
                         color: Color::TRANSPARENT,
                         width: 0.0,
-                        radius: 8.0.into(),
+                        radius: RADIUS_CONTROL.into(),
                     },
                     ..Default::default()
                 })
@@ -190,9 +186,9 @@ impl Digger {
                 .font(self.typo.regular)
                 .color(self.pal.label),
             Space::new().height(8),
-            Row::with_children(buttons).spacing(8),
+            Row::with_children(buttons).spacing(SPACE_MD),
         ]
-        .spacing(2)
+        .spacing(SPACE_2XS)
         .into()
     }
 }

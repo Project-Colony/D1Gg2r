@@ -1,7 +1,7 @@
 //! Preferences -> Language.
 
 use iced::widget::{button, column, container, row, text, Column, Row, Space};
-use iced::{Alignment, Background, Border, Color, Element, Length, Shadow, Theme, Vector};
+use iced::{Alignment, Background, Border, Color, Element, Length, Theme};
 
 use crate::i18n::Language;
 use crate::ui::settings::*;
@@ -26,7 +26,7 @@ impl Digger {
                 .font(self.typo.regular)
                 .color(label_c),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         // Current language info
         let current_info = container(row![
@@ -46,19 +46,14 @@ impl Digger {
                 .size(self.typo.sz(11))
                 .color(label_c),
         ])
-        .padding([8, 12])
+        .padding(PAD_CARD)
         .width(Length::Fill)
         .style(move |_: &Theme| container::Style {
             background: Some(Background::Color(panel_bg)),
             border: Border {
                 color: border_c,
                 width: 1.0,
-                radius: 8.0.into(),
-            },
-            shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.08),
-                offset: Vector::new(0.0, 1.0),
-                blur_radius: 4.0,
+                radius: RADIUS_CONTROL.into(),
             },
             ..Default::default()
         });
@@ -120,14 +115,14 @@ impl Digger {
                             },
                             text(lang.code()).size(self.typo.sz(9)).color(lang_label_c),
                         ]
-                        .spacing(1),
+                        .spacing(SPACE_2XS),
                     ]
                     .align_y(Alignment::Center);
 
                     let btn = button(content)
                         .on_press(Message::SetLanguage(lang))
                         .width(Length::Fill)
-                        .padding([6, 10])
+                        .padding(PAD_ROW)
                         .style(move |_: &Theme, status| {
                             let bg = match status {
                                 button::Status::Hovered => hover_bg,
@@ -140,7 +135,7 @@ impl Digger {
                                 border: Border {
                                     color: btn_border,
                                     width: btn_width,
-                                    radius: 6.0.into(),
+                                    radius: RADIUS_CARD.into(),
                                 },
                                 ..Default::default()
                             }
@@ -150,9 +145,9 @@ impl Digger {
                     cols.push(Space::new().width(Length::FillPortion(1)).into());
                 }
             }
-            grid_rows.push(Row::with_children(cols).spacing(6).into());
+            grid_rows.push(Row::with_children(cols).spacing(SPACE_SM).into());
         }
-        let grid = Column::with_children(grid_rows).spacing(3);
+        let grid = Column::with_children(grid_rows).spacing(SPACE_2XS);
 
         column![
             title,
@@ -161,7 +156,7 @@ impl Digger {
             Space::new().height(12),
             grid,
         ]
-        .spacing(4)
+        .spacing(SPACE_XS)
         .into()
     }
 }

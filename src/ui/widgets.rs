@@ -5,12 +5,13 @@
 
 use iced::widget::canvas::Canvas;
 use iced::widget::{button, column, container, progress_bar, row, text, tooltip, Row};
-use iced::{Alignment, Background, Border, Color, Element, Length, Shadow, Theme, Vector};
+use iced::{Alignment, Background, Border, Color, Element, Length, Shadow, Theme};
 
 use crate::chart::{ChartColors, LineChart};
 use crate::icons::*;
 use crate::message::*;
 use crate::theme::Palette;
+use crate::ui::layout::*;
 
 // ─── HELPER FUNCTIONS ────────────────────────────────────────────
 
@@ -44,13 +45,10 @@ pub(crate) fn format_temp(temp_c: f32, celsius: bool) -> String {
 }
 
 pub(crate) fn themed_bar(value: f32, color: Color, bar_bg: Color) -> Element<'static, Message> {
-    // Enhanced bar with more rounded corners and subtle lighter tint
-    let bar_color = Color::from_rgba(
-        (color.r * 0.9 + 0.1).min(1.0),
-        (color.g * 0.9 + 0.1).min(1.0),
-        (color.b * 0.9 + 0.1).min(1.0),
-        color.a,
-    );
+    // The colour arrives already adjusted for legibility against this surface;
+    // the old `* 0.9 + 0.1` lightening pushed it back toward white and undid
+    // that on exactly the light themes where it mattered.
+    let bar_color = color;
     progress_bar(0.0..=100.0, value)
         .length(Length::Fill)
         .style(move |_: &Theme| progress_bar::Style {
@@ -59,7 +57,7 @@ pub(crate) fn themed_bar(value: f32, color: Color, bar_bg: Color) -> Element<'st
             border: Border {
                 color: Color::TRANSPARENT,
                 width: 0.0,
-                radius: 5.0.into(),
+                radius: RADIUS_CARD.into(),
             },
         })
         .into()
@@ -104,17 +102,12 @@ pub(crate) fn sidebar_item<'a>(
 ) -> Element<'a, Message> {
     let is_active = target == current;
     let sidebar_bg = p.sidebar_bg;
-    // Slightly lighten sidebar_bg for active state
-    let active_bg = Color::from_rgb(
-        (sidebar_bg.r + 0.06).min(1.0),
-        (sidebar_bg.g + 0.06).min(1.0),
-        (sidebar_bg.b + 0.06).min(1.0),
-    );
-    let hover_bg = Color::from_rgb(
-        (sidebar_bg.r + 0.03).min(1.0),
-        (sidebar_bg.g + 0.03).min(1.0),
-        (sidebar_bg.b + 0.03).min(1.0),
-    );
+    // From the palette, not from arithmetic on the background. Adding 0.06 to
+    // each channel clips to white on the pale themes, which is how a selected
+    // item came to be indistinguishable from a card on Modus Operandi and
+    // One Dark Light.
+    let active_bg = p.selected;
+    let hover_bg = p.hover;
     let bg = if is_active { active_bg } else { sidebar_bg };
     let border_color = if is_active { color } else { Color::TRANSPARENT };
     let label_c = p.label;
@@ -131,12 +124,12 @@ pub(crate) fn sidebar_item<'a>(
             .font(typo.regular)
             .color(if is_active { text_c } else { label_c }),
     ]
-    .spacing(2);
+    .spacing(SPACE_2XS);
 
     button(content)
         .on_press(Message::OverviewSection(target))
         .width(Length::Fill)
-        .padding([8, 10])
+        .padding(PAD_CARD)
         .style(move |_: &Theme, status| {
             let bg_final = match status {
                 button::Status::Hovered => {
@@ -154,17 +147,8 @@ pub(crate) fn sidebar_item<'a>(
                 text_color: text_c,
                 border: Border {
                     color: border_color,
-                    width: if is_active { 2.5 } else { 0.0 },
-                    radius: 6.0.into(),
-                },
-                shadow: if is_active {
-                    Shadow {
-                        color: Color::from_rgba(color.r, color.g, color.b, 0.2),
-                        offset: Vector::new(0.0, 1.0),
-                        blur_radius: 4.0,
-                    }
-                } else {
-                    Shadow::default()
+                    width: if is_active { 1.0 } else { 0.0 },
+                    radius: RADIUS_CARD.into(),
                 },
 
                 ..Default::default()
@@ -187,9 +171,13 @@ pub(crate) fn settings_sidebar_item(
     } else {
         Color::TRANSPARENT
     };
-    let hover_bg = Color::from_rgba(accent.r, accent.g, accent.b, 0.3);
-    let text_color = if is_active { p.text } else { p.label };
-    let text_c = p.text;
+    let hover_bg = p.hover;
+    // Colony fills the selected category with the accent and writes
+    // text_primary on it. That pairing is below 4.5:1 on fifty-eight of the
+    // fifty-nine themes and as low as 1.01:1 on Ayu Dark, so the fill stays and
+    // the foreground comes from the helper colony-ui provides for exactly this.
+    let on_accent = colony_ui::contrast_on(accent);
+    let text_color = if is_active { on_accent } else { p.label };
 
     button(
         text(label.to_string())
@@ -199,35 +187,20 @@ pub(crate) fn settings_sidebar_item(
     )
     .on_press(Message::SettingsPanelSelected(target))
     .width(Length::Fill)
-    .padding([8, 12])
+    .padding(PAD_CARD)
     .style(move |_: &Theme, status| {
         let bg_final = match status {
-            button::Status::Hovered => {
-                if is_active {
-                    accent
-                } else {
-                    hover_bg
-                }
-            }
-            button::Status::Pressed => accent,
+            _ if is_active => accent,
+            button::Status::Hovered => hover_bg,
             _ => bg,
         };
         button::Style {
             background: Some(Background::Color(bg_final)),
-            text_color: text_c,
+            text_color,
             border: Border {
                 color: Color::TRANSPARENT,
                 width: 0.0,
-                radius: 6.0.into(),
-            },
-            shadow: if is_active {
-                Shadow {
-                    color: Color::from_rgba(accent.r, accent.g, accent.b, 0.25),
-                    offset: Vector::new(0.0, 1.0),
-                    blur_radius: 4.0,
-                }
-            } else {
-                Shadow::default()
+                radius: RADIUS_CONTROL.into(),
             },
 
             ..Default::default()
@@ -250,7 +223,7 @@ pub(crate) fn info_row<'a>(
         text(l).size(typo.sz(11)).color(label_c).width(120),
         text(v).size(typo.sz(11)).font(typo.regular).color(text_c),
     ]
-    .spacing(8)
+    .spacing(SPACE_MD)
     .into()
 }
 
@@ -325,7 +298,7 @@ pub(crate) fn process_row<'a>(
             border: Border {
                 color: accent,
                 width: 1.0,
-                radius: 4.0.into(),
+                radius: RADIUS_CARD.into(),
             },
             text_color: Some(text_c),
             shadow: Shadow::default(),
@@ -376,7 +349,7 @@ pub(crate) fn process_row<'a>(
                 .width(40),
             kill_btn,
         ]
-        .spacing(2)
+        .spacing(SPACE_2XS)
         .align_y(Alignment::Center),
     )
     .padding([2, 10])
@@ -398,12 +371,7 @@ pub(crate) fn panel<'a>(content: Element<'a, Message>, p: &Palette) -> Element<'
             border: Border {
                 color: border_c,
                 width: 1.0,
-                radius: 8.0.into(),
-            },
-            shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.15),
-                offset: Vector::new(0.0, 2.0),
-                blur_radius: 8.0,
+                radius: RADIUS_CONTROL.into(),
             },
             ..Default::default()
         })
@@ -449,7 +417,7 @@ pub(crate) fn menu_tab(
             .color(color),
     )
     .on_press(Message::TabSelected(tab))
-    .padding([4, 14])
+    .padding(PAD_CARD)
     .style(move |_: &Theme, status| {
         let bg = match status {
             button::Status::Hovered => hover_color,
@@ -472,7 +440,7 @@ pub(crate) fn menu_tab(
                     Color::TRANSPARENT
                 },
                 width: 0.0,
-                radius: 6.0.into(),
+                radius: RADIUS_CARD.into(),
             },
             ..Default::default()
         }
@@ -493,10 +461,21 @@ pub(crate) fn section_title(
         .into()
 }
 
+/// How the two numbers under a bar should be written.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BarUnit {
+    /// `2.1 GiB/15.9 GiB`.
+    Bytes,
+    /// `2%` — for a value that is already a proportion, where the byte
+    /// formatter used to print the memorable nonsense "2 B/100 B".
+    Percent,
+}
+
 pub(crate) fn labeled_bar(
     label: &str,
     used: u64,
     total: u64,
+    unit: BarUnit,
     color: Color,
     p: &Palette,
     typo: &colony_ui::Typography,
@@ -513,13 +492,16 @@ pub(crate) fn labeled_bar(
             .color(label_c)
             .width(60),
         themed_bar(pct, color, bar_bg),
-        text(format!("{}/{}", format_bytes(used), format_bytes(total)))
-            .size(typo.sz(11))
-            .font(typo.regular)
-            .color(color)
-            .width(150),
+        text(match unit {
+            BarUnit::Bytes => format!("{}/{}", format_bytes(used), format_bytes(total)),
+            BarUnit::Percent => format!("{pct:.0}%"),
+        })
+        .size(typo.sz(11))
+        .font(typo.regular)
+        .color(color)
+        .width(150),
     ]
-    .spacing(6)
+    .spacing(SPACE_SM)
     .align_y(Alignment::Center)
     .into()
 }
@@ -534,7 +516,7 @@ pub(crate) fn sort_btn(
     button(text(label).size(typo.sz(11)).color(accent))
         .on_press(Message::SortBy(col))
         .style(button::text)
-        .padding([2, 4])
+        .padding(PAD_TIGHT)
         .width(Length::Fixed(f32::from(width)))
         .into()
 }
@@ -614,8 +596,8 @@ pub(crate) fn make_threshold_buttons<'a>(
         } else {
             button::secondary
         })
-        .padding([4, 10]);
+        .padding(PAD_ROW);
         btns.push(btn.into());
     }
-    Row::with_children(btns).spacing(4).into()
+    Row::with_children(btns).spacing(SPACE_XS).into()
 }

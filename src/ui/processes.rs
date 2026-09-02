@@ -6,6 +6,7 @@ use iced::{Alignment, Background, Border, Color, Element, Length, Theme};
 use crate::icons::*;
 use crate::message::*;
 use crate::state::*;
+use crate::ui::layout::*;
 use crate::ui::widgets::*;
 
 impl Digger {
@@ -63,7 +64,7 @@ impl Digger {
             )
             .on_press(Message::ToggleGrouped)
             .style(button::secondary)
-            .padding([3, 10]),
+            .padding(PAD_ROW),
             Space::new().width(Length::Fill),
             text(format!(
                 "{ICON_LIST} {} {}",
@@ -74,9 +75,9 @@ impl Digger {
             .font(self.typo.regular)
             .color(label_c),
         ]
-        .spacing(6)
+        .spacing(SPACE_SM)
         .align_y(Alignment::Center)
-        .padding([6, 10]);
+        .padding(PAD_ROW);
 
         let filter_lower = self.process_filter.to_lowercase();
         let filtered: Vec<_> = snap
@@ -145,9 +146,9 @@ impl Digger {
                     .color(accent)
                     .width(60),
             ]
-            .spacing(2),
+            .spacing(SPACE_2XS),
         )
-        .padding([4, 10])
+        .padding(PAD_ROW)
         .style(move |_: &Theme| container::Style {
             background: Some(Background::Color(sidebar_bg)),
             border: Border {
@@ -225,7 +226,7 @@ impl Digger {
                         .font(self.typo.regular)
                         .color(color),
                 )
-                .padding([4, 10])
+                .padding(PAD_ROW)
                 .width(Length::Fill)
                 .style(move |_: &Theme| container::Style {
                     background: Some(Background::Color(hdr_bg)),

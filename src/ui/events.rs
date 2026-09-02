@@ -6,6 +6,7 @@ use iced::{Alignment, Background, Element, Length, Theme};
 use crate::icons::*;
 use crate::message::*;
 use crate::state::*;
+use crate::ui::layout::*;
 use crate::ui::widgets::*;
 
 impl Digger {
@@ -27,7 +28,7 @@ impl Digger {
                 .font(self.typo.regular)
                 .color(label_c),
         ]
-        .padding([6, 10])
+        .padding(PAD_ROW)
         .align_y(Alignment::Center);
 
         let mut rows: Vec<Element<Message>> = Vec::new();
@@ -65,10 +66,10 @@ impl Digger {
                             .width(20),
                         text(&ev.message).size(self.typo.sz(11)).color(p.text),
                     ]
-                    .spacing(6)
+                    .spacing(SPACE_SM)
                     .align_y(Alignment::Center),
                 )
-                .padding([3, 10])
+                .padding(PAD_ROW)
                 .style(move |_: &Theme| container::Style {
                     background: Some(Background::Color(row_bg)),
                     ..Default::default()

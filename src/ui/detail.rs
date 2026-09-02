@@ -2,13 +2,14 @@
 
 use iced::widget::canvas::Canvas;
 use iced::widget::{column, container, row, text, Column, Row, Space};
-use iced::{Alignment, Background, Border, Color, Element, Length, Shadow, Theme, Vector};
+use iced::{Alignment, Background, Border, Color, Element, Length, Theme};
 
 use crate::gauge::{GaugeColors, RadialGauge};
 use crate::icons::*;
 use crate::message::*;
 use crate::metrics::Snapshot;
 use crate::state::*;
+use crate::ui::layout::*;
 use crate::ui::widgets::*;
 
 impl Digger {
@@ -77,7 +78,7 @@ impl Digger {
                 .font(self.typo.regular)
                 .color(p.text),
         ]
-        .spacing(2)
+        .spacing(SPACE_2XS)
         .align_y(Alignment::Center);
 
         // Use animated per-core values
@@ -111,16 +112,16 @@ impl Digger {
                             .color(color)
                             .width(36),
                     ]
-                    .spacing(2)
+                    .spacing(SPACE_2XS)
                     .align_y(Alignment::Center);
                     cols.push(container(core).width(Length::FillPortion(1)).into());
                 } else {
                     cols.push(Space::new().width(Length::FillPortion(1)).into());
                 }
             }
-            grid_rows.push(Row::with_children(cols).spacing(8).into());
+            grid_rows.push(Row::with_children(cols).spacing(SPACE_MD).into());
         }
-        let cores_grid = Column::with_children(grid_rows).spacing(1);
+        let cores_grid = Column::with_children(grid_rows).spacing(SPACE_2XS);
 
         let uptime = format_duration(snap.uptime_secs);
         let info = column![
@@ -146,12 +147,12 @@ impl Digger {
             info_row(t.processes, snap.process_count.to_string(), p, &self.typo),
             info_row(t.uptime, &uptime, p, &self.typo),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         panel(
             column![
                 row![cpu_gauge, column![cpu_chart].width(Length::Fill),]
-                    .spacing(6)
+                    .spacing(SPACE_SM)
                     .align_y(Alignment::Center),
                 Space::new().height(4),
                 Element::from(load_info),
@@ -162,7 +163,7 @@ impl Digger {
                 section_title(t.system_info, p, &self.typo),
                 info,
             ]
-            .spacing(4)
+            .spacing(SPACE_XS)
             .into(),
             p,
         )
@@ -220,13 +221,14 @@ impl Digger {
             info_row(t.available, format_bytes(available), p, &self.typo),
             info_row(t.usage, format!("{:.1}%", display_mem), p, &self.typo),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         let bars = column![
             labeled_bar(
                 "RAM",
                 snap.memory_used,
                 snap.memory_total,
+                BarUnit::Bytes,
                 p.green,
                 p,
                 &self.typo
@@ -235,12 +237,13 @@ impl Digger {
                 "Swap",
                 snap.swap_used,
                 snap.swap_total,
+                BarUnit::Bytes,
                 p.yellow,
                 p,
                 &self.typo
             ),
         ]
-        .spacing(6);
+        .spacing(SPACE_SM);
 
         // Process virtual memory total
         let total_virt: u64 = if let Some(snap) = &self.current {
@@ -268,7 +271,7 @@ impl Digger {
                 &self.typo
             ),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         let gc = GaugeColors {
             bg: p.panel_bg,
@@ -289,7 +292,7 @@ impl Digger {
         panel(
             column![
                 row![mem_gauge, column![mem_chart].width(Length::Fill),]
-                    .spacing(6)
+                    .spacing(SPACE_SM)
                     .align_y(Alignment::Center),
                 Space::new().height(8),
                 bars,
@@ -300,7 +303,7 @@ impl Digger {
                 section_title(t.swap, p, &self.typo),
                 swap_info,
             ]
-            .spacing(4)
+            .spacing(SPACE_XS)
             .into(),
             p,
         )
@@ -362,7 +365,7 @@ impl Digger {
                 &self.typo
             ),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         let text_c = p.text;
         let green = p.green;
@@ -388,7 +391,7 @@ impl Digger {
                     .color(red)
                     .width(110),
             ]
-            .spacing(8)
+            .spacing(SPACE_MD)
             .align_y(Alignment::Center);
             iface_items.push(item.into());
         }
@@ -401,9 +404,9 @@ impl Digger {
                 totals,
                 Space::new().height(8),
                 section_title(t.interfaces, p, &self.typo),
-                Column::with_children(iface_items).spacing(3),
+                Column::with_children(iface_items).spacing(SPACE_2XS),
             ]
-            .spacing(4)
+            .spacing(SPACE_XS)
             .into(),
             p,
         )
@@ -441,17 +444,17 @@ impl Digger {
                         .font(self.typo.regular)
                         .color(label_c),
                 ]
-                .spacing(4)
+                .spacing(SPACE_XS)
                 .width(Length::FillPortion(1)),
                 column![
                     info_row(t.total_capacity, format_bytes(total_space), p, &self.typo),
                     info_row(t.total_used, format_bytes(total_used), p, &self.typo),
                     info_row(t.total_free, format_bytes(total_avail), p, &self.typo),
                 ]
-                .spacing(4)
+                .spacing(SPACE_XS)
                 .width(Length::FillPortion(1)),
             ]
-            .spacing(20),
+            .spacing(SPACE_XL),
         )
         .padding(12)
         .width(Length::Fill)
@@ -460,12 +463,7 @@ impl Digger {
             border: Border {
                 color: border_c,
                 width: 1.0,
-                radius: 8.0.into(),
-            },
-            shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.08),
-                offset: Vector::new(0.0, 1.0),
-                blur_radius: 4.0,
+                radius: RADIUS_CONTROL.into(),
             },
             ..Default::default()
         });
@@ -531,7 +529,7 @@ impl Digger {
                             info_row(t.file_system, &d.fs_type, p, &self.typo),
                             info_row(t.mount_point, &d.mount, p, &self.typo),
                         ]
-                        .spacing(3)
+                        .spacing(SPACE_2XS)
                         .width(Length::FillPortion(1)),
                         column![
                             info_row(t.device, &d.name, p, &self.typo),
@@ -542,10 +540,10 @@ impl Digger {
                                 &self.typo
                             ),
                         ]
-                        .spacing(3)
+                        .spacing(SPACE_2XS)
                         .width(Length::FillPortion(1)),
                     ]
-                    .spacing(20),
+                    .spacing(SPACE_XL),
                 ]
                 .spacing(0),
             )
@@ -556,12 +554,7 @@ impl Digger {
                 border: Border {
                     color: border_c,
                     width: 1.0,
-                    radius: 8.0.into(),
-                },
-                shadow: Shadow {
-                    color: Color::from_rgba(0.0, 0.0, 0.0, 0.1),
-                    offset: Vector::new(0.0, 2.0),
-                    blur_radius: 6.0,
+                    radius: RADIUS_CONTROL.into(),
                 },
                 ..Default::default()
             });
@@ -583,7 +576,7 @@ impl Digger {
                 &self.typo
             ),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         let disk_title = format!("{ICON_DISK} {}", t.disk_drives);
         panel(
@@ -594,9 +587,9 @@ impl Digger {
                 section_title(t.io_throughput, p, &self.typo),
                 disk_io_info,
                 Space::new().height(8),
-                Column::with_children(disk_items).spacing(8),
+                Column::with_children(disk_items).spacing(SPACE_MD),
             ]
-            .spacing(4)
+            .spacing(SPACE_XS)
             .into(),
             p,
         )
@@ -624,7 +617,7 @@ impl Digger {
                         .font(self.typo.regular)
                         .color(label_c),
                 ]
-                .spacing(6)
+                .spacing(SPACE_SM)
                 .into(),
                 p,
             );
@@ -652,10 +645,10 @@ impl Digger {
                         .font(self.typo.regular)
                         .color(color),
                 ]
-                .spacing(8)
+                .spacing(SPACE_MD)
                 .align_y(Alignment::Center),
             )
-            .padding([4, 8])
+            .padding(PAD_TIGHT)
             .style(move |_: &Theme| container::Style {
                 background: Some(Background::Color(row_bg)),
                 ..Default::default()
@@ -704,7 +697,7 @@ impl Digger {
                 &self.typo
             ),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         let temp_overview_title = format!("{ICON_TEMP} {}", t.temperature_overview);
         panel(
@@ -715,7 +708,7 @@ impl Digger {
                 section_title(t.all_sensors, p, &self.typo),
                 Column::with_children(temp_items).spacing(0),
             ]
-            .spacing(4)
+            .spacing(SPACE_XS)
             .into(),
             p,
         )
@@ -737,7 +730,7 @@ impl Digger {
                         .font(self.typo.regular)
                         .color(label_c),
                 ]
-                .spacing(6)
+                .spacing(SPACE_SM)
                 .into(),
                 p,
             );
@@ -792,6 +785,7 @@ impl Digger {
                         "Util",
                         gpu.utilization as u64,
                         100,
+                        BarUnit::Percent,
                         util_color,
                         p,
                         &self.typo
@@ -800,12 +794,13 @@ impl Digger {
                         "VRAM",
                         gpu.memory_used,
                         gpu.memory_total,
+                        BarUnit::Bytes,
                         p.magenta,
                         p,
                         &self.typo
                     ),
                 ]
-                .spacing(4)
+                .spacing(SPACE_XS)
                 .into(),
             );
         }
@@ -813,9 +808,9 @@ impl Digger {
         panel(
             column![
                 section_title(format!("{ICON_GPU} {}", t.gpu), p, &self.typo),
-                Column::with_children(gpu_items).spacing(12),
+                Column::with_children(gpu_items).spacing(SPACE_LG),
             ]
-            .spacing(4)
+            .spacing(SPACE_XS)
             .into(),
             p,
         )

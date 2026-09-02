@@ -147,6 +147,12 @@ pub struct Palette {
     pub label: Color,
     pub text: Color,
     pub bar_bg: Color,
+    /// The two interaction surfaces. They come from the palette rather than
+    /// from arithmetic on the background: adding 0.06 to each channel is
+    /// invisible on a theme whose background is already near white, which is
+    /// what made the selected sidebar item disappear on every light theme.
+    pub hover: Color,
+    pub selected: Color,
     // Semantic
     pub accent: Color,
     pub green: Color,
@@ -212,7 +218,13 @@ pub fn base_palette_with(theme: &ThemeChoice, high_contrast: bool) -> Palette {
         },
         label: p.text_muted,
         text: p.text_primary,
-        bar_bg: p.bg_progress,
+        // Six of the fifty-nine palettes give bg_progress the same value as
+        // bg_card — every Catppuccin variant among them — which draws an
+        // invisible track under every progress bar. Separate it from the card
+        // it sits on rather than trusting the two to differ.
+        bar_bg: separated(p.bg_progress, p.bg_card, p.text_primary),
+        hover: p.bg_card_hover,
+        selected: p.bg_selected,
         // Replaced by build_palette with the user's chosen accent.
         accent: p.accent_blue,
         green: legible(p.success),
@@ -225,6 +237,25 @@ pub fn base_palette_with(theme: &ThemeChoice, high_contrast: bool) -> Palette {
 }
 
 // ─── LEGIBILITY ─────────────────────────────────────────────────
+
+/// Nudge a surface toward the ink until it is distinguishable from the surface
+/// behind it. Returns `surface` untouched when the two already differ.
+fn separated(surface: Color, behind: Color, ink: Color) -> Color {
+    const MIN: f32 = 1.12;
+    let mix = |t: f32| Color {
+        r: surface.r + (ink.r - surface.r) * t,
+        g: surface.g + (ink.g - surface.g) * t,
+        b: surface.b + (ink.b - surface.b) * t,
+        a: surface.a,
+    };
+    if contrast(surface, behind) >= MIN {
+        return surface;
+    }
+    (1..=16)
+        .map(|step| mix(step as f32 / 64.0))
+        .find(|c| contrast(*c, behind) >= MIN)
+        .unwrap_or_else(|| mix(0.25))
+}
 
 /// WCAG relative luminance.
 ///
@@ -487,5 +518,40 @@ mod tests {
     fn an_accent_this_build_does_not_know_means_follow_the_theme() {
         let got: AccentChoice = serde_json::from_str("\"chartreuse\"").unwrap();
         assert_eq!(got.key(), None);
+    }
+
+    /// Six palettes give bg_progress the same value as bg_card, which draws an
+    /// invisible track under every progress bar. Whatever the palette says, the
+    /// track has to be visible against the card it sits on.
+    #[test]
+    fn the_progress_track_is_visible_against_the_card_on_every_theme() {
+        let mut invisible = Vec::new();
+        for theme in all_themes() {
+            let p = base_palette(&theme);
+            if contrast(p.bar_bg, p.panel_bg) < 1.12 {
+                invisible.push(format!(
+                    "{}/{}: {:.3}:1",
+                    theme.family,
+                    theme.variant,
+                    contrast(p.bar_bg, p.panel_bg)
+                ));
+            }
+        }
+        assert!(
+            invisible.is_empty(),
+            "invisible progress tracks:\n  {}",
+            invisible.join("\n  ")
+        );
+    }
+
+    /// And a palette that already separates the two must come back untouched,
+    /// so the fix does not repaint the fifty-three themes that were fine.
+    #[test]
+    fn a_track_that_already_reads_is_left_alone() {
+        let p = colony_ui::resolve("gruvbox", "dark");
+        assert_eq!(
+            base_palette(&ThemeChoice::new("gruvbox", "dark")).bar_bg,
+            p.bg_progress
+        );
     }
 }

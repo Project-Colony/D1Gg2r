@@ -2,12 +2,13 @@
 
 use iced::widget::canvas::Canvas;
 use iced::widget::{column, container, row, scrollable, text, Space};
-use iced::{Background, Border, Color, Element, Length, Shadow, Theme, Vector};
+use iced::{Background, Border, Color, Element, Length, Theme};
 
 use crate::gauge::Sparkline;
 use crate::icons::*;
 use crate::message::*;
 use crate::state::*;
+use crate::ui::layout::*;
 use crate::ui::widgets::*;
 
 impl Digger {
@@ -129,7 +130,7 @@ impl Digger {
                 .font(self.typo.regular)
                 .color(p.text),
             ]
-            .spacing(2)
+            .spacing(SPACE_2XS)
             .padding(4),
         )
         .width(160)
@@ -140,11 +141,6 @@ impl Digger {
                 color: border_c,
                 width: 1.0,
                 radius: 0.0.into(),
-            },
-            shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.12),
-                offset: Vector::new(2.0, 0.0),
-                blur_radius: 8.0,
             },
             ..Default::default()
         });

@@ -6,6 +6,7 @@ use iced::{Element, Length};
 use crate::icons::*;
 use crate::message::*;
 use crate::state::*;
+use crate::ui::layout::*;
 use crate::ui::widgets::*;
 
 impl Digger {
@@ -35,7 +36,7 @@ impl Digger {
                 } else {
                     button::secondary
                 })
-                .padding([3, 10]);
+                .padding(PAD_ROW);
             range_btns.push(btn.into());
         }
 
@@ -49,7 +50,7 @@ impl Digger {
             )
             .on_press(Message::ExportCsv)
             .style(button::secondary)
-            .padding([3, 10])
+            .padding(PAD_ROW)
             .into(),
         );
         range_btns.push(
@@ -60,11 +61,13 @@ impl Digger {
             )
             .on_press(Message::ExportJson)
             .style(button::secondary)
-            .padding([3, 10])
+            .padding(PAD_ROW)
             .into(),
         );
 
-        let range_row = Row::with_children(range_btns).spacing(4).padding([6, 10]);
+        let range_row = Row::with_children(range_btns)
+            .spacing(SPACE_XS)
+            .padding(PAD_ROW);
 
         if self.history_points.is_empty() {
             return panel(
@@ -80,7 +83,7 @@ impl Digger {
                     .center_x(Length::Fill),
                     Space::new().height(20),
                 ]
-                .spacing(4)
+                .spacing(SPACE_XS)
                 .into(),
                 p,
             );
@@ -175,11 +178,11 @@ impl Digger {
         });
 
         let content = column![
-            panel(column![range_row, cpu_chart].spacing(6).into(), p),
+            panel(column![range_row, cpu_chart].spacing(SPACE_SM).into(), p),
             panel(mem_chart, p),
             panel(net_chart, p),
         ]
-        .spacing(4)
+        .spacing(SPACE_XS)
         .padding(4);
 
         scrollable(content).into()

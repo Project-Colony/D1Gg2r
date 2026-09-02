@@ -24,7 +24,7 @@ impl Digger {
                 .font(self.typo.regular)
                 .color(label_c),
         ]
-        .spacing(4);
+        .spacing(SPACE_XS);
 
         let mut rate_btns: Vec<Element<Message>> = Vec::new();
         for &secs in REFRESH_OPTIONS {
@@ -42,7 +42,7 @@ impl Digger {
             } else {
                 button::secondary
             })
-            .padding([4, 12]);
+            .padding(PAD_ROW);
             rate_btns.push(btn.into());
         }
 
@@ -57,12 +57,12 @@ impl Digger {
                     .font(self.typo.regular)
                     .color(label_c),
             ]
-            .spacing(2)
+            .spacing(SPACE_2XS)
             .width(Length::FillPortion(2)),
-            Row::with_children(rate_btns).spacing(4),
+            Row::with_children(rate_btns).spacing(SPACE_XS),
         ]
         .align_y(Alignment::Center)
-        .spacing(12);
+        .spacing(SPACE_LG);
 
         let temp_toggle = button(
             text(if self.temp_celsius {
@@ -94,12 +94,12 @@ impl Digger {
                     .font(self.typo.regular)
                     .color(label_c),
             ]
-            .spacing(2)
+            .spacing(SPACE_2XS)
             .width(Length::FillPortion(2)),
             temp_toggle,
         ]
         .align_y(Alignment::Center)
-        .spacing(12);
+        .spacing(SPACE_LG);
 
         let monitoring_section = self.section(
             SettingsSection::Monitoring,
@@ -119,7 +119,7 @@ impl Digger {
                     .font(self.typo.regular)
                     .color(label_c),
             ]
-            .spacing(2)
+            .spacing(SPACE_2XS)
             .width(Length::FillPortion(2)),
             text(format!("{}", self.process_limit))
                 .size(self.typo.sz(12))
@@ -127,7 +127,7 @@ impl Digger {
                 .color(accent),
         ]
         .align_y(Alignment::Center)
-        .spacing(12);
+        .spacing(SPACE_LG);
 
         let history_points_row = row![
             column![
@@ -140,7 +140,7 @@ impl Digger {
                     .font(self.typo.regular)
                     .color(label_c),
             ]
-            .spacing(2)
+            .spacing(SPACE_2XS)
             .width(Length::FillPortion(2)),
             text(format!("{}", self.live_max))
                 .size(self.typo.sz(12))
@@ -148,7 +148,7 @@ impl Digger {
                 .color(accent),
         ]
         .align_y(Alignment::Center)
-        .spacing(12);
+        .spacing(SPACE_LG);
 
         let retention_row = row![
             column![
@@ -161,7 +161,7 @@ impl Digger {
                     .font(self.typo.regular)
                     .color(label_c),
             ]
-            .spacing(2)
+            .spacing(SPACE_2XS)
             .width(Length::FillPortion(2)),
             text(format!("{}h", self.retention_hours))
                 .size(self.typo.sz(12))
@@ -169,7 +169,7 @@ impl Digger {
                 .color(accent),
         ]
         .align_y(Alignment::Center)
-        .spacing(12);
+        .spacing(SPACE_LG);
 
         let display_section = self.section(
             SettingsSection::Display,
@@ -207,7 +207,7 @@ impl Digger {
                     .font(self.typo.regular)
                     .color(label_c),
             ]
-            .spacing(2)
+            .spacing(SPACE_2XS)
             .width(Length::FillPortion(2)),
             text(db_status)
                 .size(self.typo.sz(11))
@@ -215,7 +215,7 @@ impl Digger {
                 .color(db_color),
         ]
         .align_y(Alignment::Center)
-        .spacing(12)
+        .spacing(SPACE_LG)
         .into()];
 
         // Show DB error if any
@@ -270,12 +270,12 @@ impl Digger {
                             .font(self.typo.regular)
                             .color(label_c),
                     ]
-                    .spacing(2)
+                    .spacing(SPACE_2XS)
                     .width(Length::FillPortion(2)),
                     cpu_alert_btns,
                 ]
                 .align_y(Alignment::Center)
-                .spacing(12),
+                .spacing(SPACE_LG),
                 Space::new().height(12),
                 row![
                     column![
@@ -288,12 +288,12 @@ impl Digger {
                             .font(self.typo.regular)
                             .color(label_c),
                     ]
-                    .spacing(2)
+                    .spacing(SPACE_2XS)
                     .width(Length::FillPortion(2)),
                     mem_alert_btns,
                 ]
                 .align_y(Alignment::Center)
-                .spacing(12),
+                .spacing(SPACE_LG),
             ]
             .into(),
         );
@@ -309,7 +309,7 @@ impl Digger {
             Space::new().height(6),
             alerts_section,
         ]
-        .spacing(4)
+        .spacing(SPACE_XS)
         .into()
     }
 }
