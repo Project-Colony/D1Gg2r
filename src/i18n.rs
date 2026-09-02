@@ -6,8 +6,9 @@
 use serde::{Deserialize, Serialize};
 
 /// All supported languages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum Language {
+    #[default]
     En,
     Fr,
     Es,
@@ -58,12 +59,6 @@ pub enum Language {
     Lt,
     Lv,
     Et,
-}
-
-impl Default for Language {
-    fn default() -> Self {
-        Language::En
-    }
 }
 
 impl Language {
@@ -721,6 +716,9 @@ static EN: Strings = Strings {
 // Fields not specified fall back to English.
 macro_rules! lang {
     ($name:ident { $($field:ident : $val:expr),* $(,)? }) => {
+        // A table that happens to specify every field makes `..EN` dead, which
+        // is fine — the point is that most of them do not.
+        #[allow(clippy::needless_update)]
         static $name: Strings = Strings {
             $($field: $val,)*
             ..EN

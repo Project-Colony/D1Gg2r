@@ -594,7 +594,7 @@ impl Collector {
 
         // Opt #1 & #8: Only refresh what we actually use.
         // CPU frequency rarely changes — refresh it every 10 ticks.
-        let cpu_refresh = if self.tick_count % 10 == 0 {
+        let cpu_refresh = if self.tick_count.is_multiple_of(10) {
             CpuRefreshKind::everything()
         } else {
             CpuRefreshKind::nothing().with_cpu_usage()

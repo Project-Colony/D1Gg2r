@@ -1,18 +1,21 @@
 #![windows_subsystem = "windows"]
 
+pub mod app;
 mod chart;
 mod gauge;
 mod gpu;
 mod history;
 pub mod i18n;
 pub mod icons;
+pub mod message;
 mod metrics;
 mod preferences;
 mod ringbuf;
+pub mod state;
 pub mod theme;
 mod ui;
 
-use ui::Digger;
+use state::Digger;
 
 /// The program's name as it appears in the Colony filesystem tree:
 /// `<config>/Colony/Digger/`, `<data>/Colony/Digger/`, `<cache>/Colony/Digger/`.
