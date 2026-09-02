@@ -110,13 +110,12 @@ pub const DYSLEXIC_FONT: iced::Font = iced::Font {
 };
 
 fn main() -> iced::Result {
-    let icon = iced::window::icon::from_file_data(
-        include_bytes!("../assets/icons/icon.png"),
-        None,
-    )
-    .ok();
+    let icon =
+        iced::window::icon::from_file_data(include_bytes!("../assets/icons/icon.png"), None).ok();
 
-    iced::application(Digger::title, Digger::update, Digger::view)
+    // 0.14 takes the state constructor first; the title is a builder step.
+    iced::application(Digger::new, Digger::update, Digger::view)
+        .title(Digger::title)
         .subscription(Digger::subscription)
         .theme(Digger::theme)
         .font(NERD_FONT_BYTES)
@@ -139,5 +138,5 @@ fn main() -> iced::Result {
             },
             ..Default::default()
         })
-        .run_with(|| (Digger::new(), iced::Task::none()))
+        .run()
 }

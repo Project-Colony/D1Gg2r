@@ -55,7 +55,16 @@ impl<Message: 'static> canvas::Program<Message> for RadialGauge {
         let total_sweep = 270.0_f32.to_radians();
 
         // Background arc (track)
-        draw_arc(&mut frame, cx, cy, radius, thickness, start_angle, total_sweep, c.bar_bg);
+        draw_arc(
+            &mut frame,
+            cx,
+            cy,
+            radius,
+            thickness,
+            start_angle,
+            total_sweep,
+            c.bar_bg,
+        );
 
         // Value arc
         let pct = (self.value / 100.0).clamp(0.0, 1.0);
@@ -63,9 +72,27 @@ impl<Message: 'static> canvas::Program<Message> for RadialGauge {
             let value_sweep = total_sweep * pct;
             // Glow pass
             let glow_color = Color::from_rgba(self.color.r, self.color.g, self.color.b, 0.2);
-            draw_arc(&mut frame, cx, cy, radius, thickness + 4.0, start_angle, value_sweep, glow_color);
+            draw_arc(
+                &mut frame,
+                cx,
+                cy,
+                radius,
+                thickness + 4.0,
+                start_angle,
+                value_sweep,
+                glow_color,
+            );
             // Main arc
-            draw_arc(&mut frame, cx, cy, radius, thickness, start_angle, value_sweep, self.color);
+            draw_arc(
+                &mut frame,
+                cx,
+                cy,
+                radius,
+                thickness,
+                start_angle,
+                value_sweep,
+                self.color,
+            );
         }
 
         // Center value text
@@ -75,8 +102,8 @@ impl<Message: 'static> canvas::Program<Message> for RadialGauge {
         val_text.color = c.text;
         val_text.size = (radius * 0.45).max(12.0).into();
         val_text.font = NERD_FONT_MONO;
-        val_text.horizontal_alignment = iced::alignment::Horizontal::Center;
-        val_text.vertical_alignment = iced::alignment::Vertical::Center;
+        val_text.align_x = iced::widget::text::Alignment::Center;
+        val_text.align_y = iced::alignment::Vertical::Center;
         frame.fill_text(val_text);
 
         // Label below
@@ -85,8 +112,8 @@ impl<Message: 'static> canvas::Program<Message> for RadialGauge {
         label_text.color = c.label;
         label_text.size = (radius * 0.2).max(9.0).into();
         label_text.font = NERD_FONT;
-        label_text.horizontal_alignment = iced::alignment::Horizontal::Center;
-        label_text.vertical_alignment = iced::alignment::Vertical::Center;
+        label_text.align_x = iced::widget::text::Alignment::Center;
+        label_text.align_y = iced::alignment::Vertical::Center;
         frame.fill_text(label_text);
 
         vec![frame.into_geometry()]
@@ -97,9 +124,12 @@ impl<Message: 'static> canvas::Program<Message> for RadialGauge {
 #[allow(clippy::too_many_arguments)]
 fn draw_arc(
     frame: &mut Frame,
-    cx: f32, cy: f32,
-    radius: f32, thickness: f32,
-    start: f32, sweep: f32,
+    cx: f32,
+    cy: f32,
+    radius: f32,
+    thickness: f32,
+    start: f32,
+    sweep: f32,
     color: Color,
 ) {
     let segments = ((sweep.abs() / PI * 60.0) as usize).max(8);
@@ -127,7 +157,6 @@ fn draw_arc(
             .with_line_cap(canvas::LineCap::Round),
     );
 }
-
 
 /// A tiny sparkline drawn via iced Canvas (for sidebar).
 #[derive(Debug, Clone)]
@@ -188,7 +217,10 @@ impl<Message: 'static> canvas::Program<Message> for Sparkline {
             }
         }
         let path = builder.build();
-        frame.stroke(&path, Stroke::default().with_color(self.color).with_width(1.2));
+        frame.stroke(
+            &path,
+            Stroke::default().with_color(self.color).with_width(1.2),
+        );
 
         vec![frame.into_geometry()]
     }

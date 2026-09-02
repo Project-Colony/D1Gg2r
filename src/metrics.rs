@@ -1,8 +1,11 @@
-use sysinfo::{System, Disks, Networks, Components, RefreshKind, CpuRefreshKind, MemoryRefreshKind, ProcessRefreshKind};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::Path;
+use std::sync::Arc;
+use sysinfo::{
+    Components, CpuRefreshKind, Disks, MemoryRefreshKind, Networks, ProcessRefreshKind,
+    RefreshKind, System,
+};
 
 /// Static system information that never changes at runtime.
 /// Wrapped in Arc to avoid cloning on every tick.
@@ -133,35 +136,34 @@ fn load_desktop_app_names() -> HashSet<String> {
 
     #[cfg(target_os = "linux")]
     {
-        let dirs = [
-            "/usr/share/applications",
-            "/usr/local/share/applications",
-        ];
+        let dirs = ["/usr/share/applications", "/usr/local/share/applications"];
         // Also add user-local .desktop files
         let home_apps = dirs::data_dir()
             .map(|d| d.join("applications"))
             .unwrap_or_default();
-        let flatpak_dirs = [
-            "/var/lib/flatpak/exports/share/applications",
-        ];
-        let snap_dirs = [
-            "/var/lib/snapd/desktop/applications",
-        ];
+        let flatpak_dirs = ["/var/lib/flatpak/exports/share/applications"];
+        let snap_dirs = ["/var/lib/snapd/desktop/applications"];
 
-        let all_dirs: Vec<&Path> = dirs.iter().map(Path::new)
+        let all_dirs: Vec<&Path> = dirs
+            .iter()
+            .map(Path::new)
             .chain(std::iter::once(home_apps.as_path()))
             .chain(flatpak_dirs.iter().map(Path::new))
             .chain(snap_dirs.iter().map(Path::new))
             .collect();
 
         for dir in all_dirs {
-            let Ok(entries) = std::fs::read_dir(dir) else { continue };
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                continue;
+            };
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|e| e.to_str()) != Some("desktop") {
                     continue;
                 }
-                let Ok(content) = std::fs::read_to_string(&path) else { continue };
+                let Ok(content) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
                 for line in content.lines() {
                     let line = line.trim();
                     if let Some(exec) = line.strip_prefix("Exec=") {
@@ -194,17 +196,18 @@ fn load_desktop_app_names() -> HashSet<String> {
     // bundle directory name.
     #[cfg(target_os = "macos")]
     {
-        let app_dirs = [
-            "/Applications",
-            "/System/Applications",
-        ];
+        let app_dirs = ["/Applications", "/System/Applications"];
         if let Some(home) = dirs::home_dir() {
             let user_apps = home.join("Applications");
-            let all: Vec<&Path> = app_dirs.iter().map(Path::new)
+            let all: Vec<&Path> = app_dirs
+                .iter()
+                .map(Path::new)
                 .chain(std::iter::once(user_apps.as_path()))
                 .collect();
             for dir in all {
-                let Ok(entries) = std::fs::read_dir(dir) else { continue };
+                let Ok(entries) = std::fs::read_dir(dir) else {
+                    continue;
+                };
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if path.extension().and_then(|e| e.to_str()) != Some("app") {
@@ -240,7 +243,9 @@ fn load_desktop_app_names() -> HashSet<String> {
         } else {
             // No home dir — just scan system-wide
             for dir in app_dirs.iter().map(Path::new) {
-                let Ok(entries) = std::fs::read_dir(dir) else { continue };
+                let Ok(entries) = std::fs::read_dir(dir) else {
+                    continue;
+                };
                 for entry in entries.flatten() {
                     let path = entry.path();
                     if let Some(stem) = path.file_stem() {
@@ -279,7 +284,13 @@ fn load_desktop_cache() -> Option<HashSet<String>> {
         return None;
     }
     let content = std::fs::read_to_string(&cache_path).ok()?;
-    Some(content.lines().filter(|l| !l.is_empty()).map(String::from).collect())
+    Some(
+        content
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(String::from)
+            .collect(),
+    )
 }
 
 /// Windows: Enumerate all visible top-level windows and return the set of
@@ -331,32 +342,74 @@ fn get_windowed_pids() -> HashSet<u32> {
 fn is_known_windows_system_process(name: &str) -> bool {
     const KNOWN: &[&str] = &[
         // Kernel & core
-        "System", "Registry", "smss.exe", "csrss.exe", "wininit.exe",
-        "services.exe", "lsass.exe", "lsaiso.exe", "svchost.exe",
-        "fontdrvhost.exe", "dwm.exe", "conhost.exe", "sihost.exe",
-        "taskhostw.exe", "RuntimeBroker.exe", "ShellExperienceHost.exe",
-        "StartMenuExperienceHost.exe", "SearchHost.exe", "TextInputHost.exe",
-        "ctfmon.exe", "dllhost.exe", "WmiPrvSE.exe",
+        "System",
+        "Registry",
+        "smss.exe",
+        "csrss.exe",
+        "wininit.exe",
+        "services.exe",
+        "lsass.exe",
+        "lsaiso.exe",
+        "svchost.exe",
+        "fontdrvhost.exe",
+        "dwm.exe",
+        "conhost.exe",
+        "sihost.exe",
+        "taskhostw.exe",
+        "RuntimeBroker.exe",
+        "ShellExperienceHost.exe",
+        "StartMenuExperienceHost.exe",
+        "SearchHost.exe",
+        "TextInputHost.exe",
+        "ctfmon.exe",
+        "dllhost.exe",
+        "WmiPrvSE.exe",
         // Security & updates
-        "MsMpEng.exe", "NisSrv.exe", "SecurityHealthService.exe",
-        "SecurityHealthSystray.exe", "SgrmBroker.exe", "MpDefenderCoreService.exe",
-        "wuauclt.exe", "TrustedInstaller.exe", "TiWorker.exe",
+        "MsMpEng.exe",
+        "NisSrv.exe",
+        "SecurityHealthService.exe",
+        "SecurityHealthSystray.exe",
+        "SgrmBroker.exe",
+        "MpDefenderCoreService.exe",
+        "wuauclt.exe",
+        "TrustedInstaller.exe",
+        "TiWorker.exe",
         // System services
-        "spoolsv.exe", "SearchIndexer.exe", "SearchProtocolHost.exe",
-        "SearchFilterHost.exe", "audiodg.exe", "WUDFHost.exe",
-        "dasHost.exe", "CompPkgSrv.exe", "SystemSettingsBroker.exe",
-        "SettingSyncHost.exe", "backgroundTaskHost.exe", "UserOOBEBroker.exe",
+        "spoolsv.exe",
+        "SearchIndexer.exe",
+        "SearchProtocolHost.exe",
+        "SearchFilterHost.exe",
+        "audiodg.exe",
+        "WUDFHost.exe",
+        "dasHost.exe",
+        "CompPkgSrv.exe",
+        "SystemSettingsBroker.exe",
+        "SettingSyncHost.exe",
+        "backgroundTaskHost.exe",
+        "UserOOBEBroker.exe",
         // Networking
-        "lsm.exe", "iphlpsvc.exe", "mDNSResponder.exe",
+        "lsm.exe",
+        "iphlpsvc.exe",
+        "mDNSResponder.exe",
         // Graphics / display
-        "winlogon.exe", "LogonUI.exe", "LockApp.exe",
+        "winlogon.exe",
+        "LogonUI.exe",
+        "LockApp.exe",
         // Memory / storage
-        "MemCompression", "vmmem", "System Idle Process",
-        "wbengine.exe", "vds.exe",
+        "MemCompression",
+        "vmmem",
+        "System Idle Process",
+        "wbengine.exe",
+        "vds.exe",
         // Misc core
-        "sppsvc.exe", "SppExtComObj.Exe", "uhssvc.exe",
-        "WaaSMedicAgent.exe", "AgentService.exe", "MoUsoCoreWorker.exe",
-        "musNotificationUx.exe", "MusNotifyIcon.exe",
+        "sppsvc.exe",
+        "SppExtComObj.Exe",
+        "uhssvc.exe",
+        "WaaSMedicAgent.exe",
+        "AgentService.exe",
+        "MoUsoCoreWorker.exe",
+        "musNotificationUx.exe",
+        "MusNotifyIcon.exe",
     ];
     // sysinfo may return names with or without the .exe suffix depending
     // on the Windows version, so strip it for comparison on both sides.
@@ -367,7 +420,9 @@ fn is_known_windows_system_process(name: &str) -> bool {
             .unwrap_or(s)
     }
     let base = strip_exe(name);
-    KNOWN.iter().any(|&k| strip_exe(k).eq_ignore_ascii_case(base))
+    KNOWN
+        .iter()
+        .any(|&k| strip_exe(k).eq_ignore_ascii_case(base))
 }
 
 /// Windows: Check if an executable path is under the Windows directory
@@ -407,9 +462,13 @@ fn is_current_user_process(pid: u32) -> bool {
         let mut our_buf = vec![0u8; 256];
         let mut needed = 0u32;
         if GetTokenInformation(
-            our_token, TokenUser, our_buf.as_mut_ptr().cast(),
-            our_buf.len() as u32, &mut needed,
-        ) == 0 {
+            our_token,
+            TokenUser,
+            our_buf.as_mut_ptr().cast(),
+            our_buf.len() as u32,
+            &mut needed,
+        ) == 0
+        {
             CloseHandle(our_token);
             return false;
         }
@@ -430,8 +489,11 @@ fn is_current_user_process(pid: u32) -> bool {
 
         let mut buf = vec![0u8; 256];
         let ok = GetTokenInformation(
-            token, TokenUser, buf.as_mut_ptr().cast(),
-            buf.len() as u32, &mut needed,
+            token,
+            TokenUser,
+            buf.as_mut_ptr().cast(),
+            buf.len() as u32,
+            &mut needed,
         );
         let is_ours = if ok != 0 {
             let their_sid = (*(buf.as_ptr() as *const TOKEN_USER)).User.Sid;
@@ -473,7 +535,8 @@ fn is_system_process(pid: u32, name: &str, exe_path: &str) -> bool {
 /// Windows: Batch-check which PIDs are system processes.
 #[cfg(target_os = "windows")]
 fn get_system_pids(procs: &[(u32, String, String)]) -> HashSet<u32> {
-    procs.iter()
+    procs
+        .iter()
         .filter(|(pid, name, exe_path)| is_system_process(*pid, name, exe_path))
         .map(|(pid, _, _)| *pid)
         .collect()
@@ -499,14 +562,17 @@ impl Collector {
         });
 
         let disks = Disks::new_with_refreshed_list();
-        let cached_disks = disks.iter().map(|d| DiskInfo {
-            name: d.name().to_string_lossy().to_string(),
-            mount: d.mount_point().to_string_lossy().to_string(),
-            fs_type: d.file_system().to_string_lossy().to_string(),
-            total: d.total_space(),
-            available: d.available_space(),
-            is_removable: d.is_removable(),
-        }).collect();
+        let cached_disks = disks
+            .iter()
+            .map(|d| DiskInfo {
+                name: d.name().to_string_lossy().to_string(),
+                mount: d.mount_point().to_string_lossy().to_string(),
+                fs_type: d.file_system().to_string_lossy().to_string(),
+                total: d.total_space(),
+                available: d.available_space(),
+                is_removable: d.is_removable(),
+            })
+            .collect();
 
         Self {
             sys,
@@ -530,39 +596,48 @@ impl Collector {
         let cpu_refresh = if self.tick_count % 10 == 0 {
             CpuRefreshKind::everything()
         } else {
-            CpuRefreshKind::new().with_cpu_usage()
+            CpuRefreshKind::nothing().with_cpu_usage()
         };
 
         // Opt #1: Only refresh process fields we need (cpu, memory, disk usage).
-        let proc_refresh = ProcessRefreshKind::new()
+        let proc_refresh = ProcessRefreshKind::nothing()
             .with_cpu()
             .with_memory()
             .with_disk_usage();
 
         self.sys.refresh_specifics(
-            RefreshKind::new()
+            RefreshKind::nothing()
                 .with_cpu(cpu_refresh)
                 .with_memory(MemoryRefreshKind::everything())
                 .with_processes(proc_refresh),
         );
-        self.networks.refresh();
-        self.components.refresh();
+        // sysinfo 0.39 merged refresh() and refresh_list() into one call: the
+        // flag says whether to drop entries that have gone. The old refresh()
+        // kept them, so `false` preserves the behaviour — an interface that
+        // disappears mid-session stops updating rather than vanishing from the
+        // display.
+        self.networks.refresh(false);
+        self.components.refresh(false);
 
         // Opt #9: Only rebuild DiskInfo every 30 ticks (disks rarely change).
         if self.tick_count - self.disks_last_refresh >= 30 {
             self.disks_last_refresh = self.tick_count;
-            self.disks.refresh();
-            self.cached_disks = self.disks.iter().map(|d| DiskInfo {
-                name: d.name().to_string_lossy().to_string(),
-                mount: d.mount_point().to_string_lossy().to_string(),
-                fs_type: d.file_system().to_string_lossy().to_string(),
-                total: d.total_space(),
-                available: d.available_space(),
-                is_removable: d.is_removable(),
-            }).collect();
+            self.disks.refresh(true);
+            self.cached_disks = self
+                .disks
+                .iter()
+                .map(|d| DiskInfo {
+                    name: d.name().to_string_lossy().to_string(),
+                    mount: d.mount_point().to_string_lossy().to_string(),
+                    fs_type: d.file_system().to_string_lossy().to_string(),
+                    total: d.total_space(),
+                    available: d.available_space(),
+                    is_removable: d.is_removable(),
+                })
+                .collect();
         } else {
             // Just refresh available space (cheap)
-            self.disks.refresh();
+            self.disks.refresh(true);
             for (cached, live) in self.cached_disks.iter_mut().zip(self.disks.iter()) {
                 cached.available = live.available_space();
             }
@@ -591,9 +666,15 @@ impl Collector {
         let mut temperatures: Vec<TempInfo> = self
             .components
             .iter()
-            .map(|c| TempInfo {
-                label: c.label().to_string(),
-                temp_c: c.temperature(),
+            // sysinfo 0.39 returns Option: a component can exist without a
+            // readable sensor. Dropping those is right — a missing reading shown
+            // as 0 °C reads as "very cold" rather than "unknown", and this list
+            // is what the temperature panel displays.
+            .filter_map(|c| {
+                c.temperature().map(|temp_c| TempInfo {
+                    label: c.label().to_string(),
+                    temp_c,
+                })
             })
             .collect();
 
@@ -605,10 +686,18 @@ impl Collector {
 
         let cpus = self.sys.cpus();
         let num_cpus = cpus.len().max(1) as f32;
-        let cpu_name = cpus.first().map(|c| c.brand().to_string()).unwrap_or_default();
+        let cpu_name = cpus
+            .first()
+            .map(|c| c.brand().to_string())
+            .unwrap_or_default();
         let cpu_frequency_mhz = cpus.first().map(|c| c.frequency()).unwrap_or(0);
         let cpu_core_count = cpus.len();
-        let process_count = self.sys.processes().values().filter(|p| p.thread_kind().is_none()).count();
+        let process_count = self
+            .sys
+            .processes()
+            .values()
+            .filter(|p| p.thread_kind().is_none())
+            .count();
         let uptime_secs = System::uptime();
 
         // Opt #2: Pre-build thread count map in O(n) instead of O(n²).
@@ -629,13 +718,20 @@ impl Collector {
         #[cfg(target_os = "windows")]
         let windowed_pids = get_windowed_pids();
         #[cfg(target_os = "windows")]
-        let all_procs: Vec<(u32, String, String)> = self.sys.processes().values()
+        let all_procs: Vec<(u32, String, String)> = self
+            .sys
+            .processes()
+            .values()
             .filter(|p| p.thread_kind().is_none())
-            .map(|p| (
-                p.pid().as_u32(),
-                p.name().to_string_lossy().to_string(),
-                p.exe().map(|e| e.to_string_lossy().to_string()).unwrap_or_default(),
-            ))
+            .map(|p| {
+                (
+                    p.pid().as_u32(),
+                    p.name().to_string_lossy().to_string(),
+                    p.exe()
+                        .map(|e| e.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                )
+            })
             .collect();
         #[cfg(target_os = "windows")]
         let system_pids = get_system_pids(&all_procs);
@@ -654,9 +750,13 @@ impl Collector {
                 // - Windows: check if process owns a visible window (like Task Manager)
                 let is_desktop_app = {
                     #[cfg(not(target_os = "windows"))]
-                    { self.desktop_app_names.contains(&name) }
+                    {
+                        self.desktop_app_names.contains(&name)
+                    }
                     #[cfg(target_os = "windows")]
-                    { windowed_pids.contains(&pid_u32) }
+                    {
+                        windowed_pids.contains(&pid_u32)
+                    }
                 };
 
                 let status_char = match p.status() {
@@ -676,18 +776,32 @@ impl Collector {
                 // - macOS: 0 for all (no grouping by owner)
                 let uid = {
                     #[cfg(target_os = "linux")]
-                    { p.user_id().map(|u| **u).unwrap_or(0) }
+                    {
+                        p.user_id().map(|u| **u).unwrap_or(0)
+                    }
                     #[cfg(target_os = "windows")]
-                    { if system_pids.contains(&pid_u32) { 1u32 } else { 0u32 } }
+                    {
+                        if system_pids.contains(&pid_u32) {
+                            1u32
+                        } else {
+                            0u32
+                        }
+                    }
                     #[cfg(target_os = "macos")]
-                    { 0u32 }
+                    {
+                        0u32
+                    }
                 };
 
                 ProcessInfo {
                     pid: pid_u32,
                     parent_pid: p.parent().map(|pid| pid.as_u32()),
                     name,
-                    cmd: p.cmd().iter().map(|s| s.to_string_lossy().to_string()).collect(),
+                    cmd: p
+                        .cmd()
+                        .iter()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .collect(),
                     cpu_usage: p.cpu_usage() / num_cpus,
                     memory_bytes: p.memory(),
                     virtual_memory_bytes: p.virtual_memory(),
@@ -703,12 +817,18 @@ impl Collector {
         let limit = self.process_limit.min(processes.len());
         if limit < processes.len() {
             processes.select_nth_unstable_by(limit, |a, b| {
-                b.cpu_usage.partial_cmp(&a.cpu_usage).unwrap_or(std::cmp::Ordering::Equal)
+                b.cpu_usage
+                    .partial_cmp(&a.cpu_usage)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
             processes.truncate(limit);
         }
         // Sort the top N for display
-        processes.sort_by(|a, b| b.cpu_usage.partial_cmp(&a.cpu_usage).unwrap_or(std::cmp::Ordering::Equal));
+        processes.sort_by(|a, b| {
+            b.cpu_usage
+                .partial_cmp(&a.cpu_usage)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let now = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
 
