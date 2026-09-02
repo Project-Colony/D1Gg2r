@@ -39,3 +39,6 @@ winres = "0.1"
 [features]
 default = []
 gpu = ["nvml-wrapper"]
+
+[dev-dependencies]
+tempfile = "3.27.0"
