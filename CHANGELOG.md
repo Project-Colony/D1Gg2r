@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/Project-Colony/D1Gg2r/compare/v0.2.1...v0.3.0) (2026-09-02)
+
+
+### Features
+
+* modernise the dependency tree and move to iced 0.14 ([#14](https://github.com/Project-Colony/D1Gg2r/issues/14)) ([9eb342a](https://github.com/Project-Colony/D1Gg2r/commit/9eb342a8b349801a45efd0dc6258b2a8dcedc7cf))
+* move Digger's theme and filesystem paths onto colony-ui ([#18](https://github.com/Project-Colony/D1Gg2r/issues/18)) ([7f21f59](https://github.com/Project-Colony/D1Gg2r/commit/7f21f599eefe01a0d0237dbd0ff2d9819963d951))
+* **ui:** rebuild Digger's interface on the shared catalog and Colony's visual language ([#16](https://github.com/Project-Colony/D1Gg2r/issues/16)) ([495fb24](https://github.com/Project-Colony/D1Gg2r/commit/495fb247ce796ff6a5e5a4b855257bc1e07e9414))
+
 ## [0.2.1](https://github.com/Project-Colony/D1Gg2r/compare/v0.2.0...v0.2.1) (2026-08-01)
 
 
