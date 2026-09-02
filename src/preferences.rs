@@ -90,13 +90,20 @@ impl Default for Preferences {
 }
 
 impl Preferences {
-    /// Config directory: Windows → AppData/Local/Colony/Digger/
-    /// Linux → ~/.config/Colony/Digger/
+    /// `<config>/Colony/Digger/` — Windows AppData\\Local, not Roaming, and
+    /// `~/.config` on Linux. The shared helper is the definition of that
+    /// layout; Digger used to spell it out and had no way to notice if it
+    /// drifted.
+    ///
+    /// `locate::` rather than `config_dir` because reading preferences should
+    /// not bring the directory into existence — only `save` creates it.
     fn config_dir() -> PathBuf {
-        dirs::config_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("Colony")
-            .join("Digger")
+        colony_ui::paths::locate::config_dir(crate::PROGRAM).unwrap_or_else(|_| PathBuf::from("."))
+    }
+
+    #[cfg(test)]
+    pub fn config_dir_for_test() -> PathBuf {
+        Self::config_dir()
     }
 
     fn config_path() -> PathBuf {

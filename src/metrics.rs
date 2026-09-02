@@ -263,8 +263,8 @@ fn load_desktop_app_names() -> HashSet<String> {
 
 /// Save the cached desktop app names to a local cache file for fast reloads.
 fn save_desktop_cache(names: &HashSet<String>) {
-    if let Some(cache_dir) = dirs::cache_dir() {
-        let cache_path = cache_dir.join("digger").join("desktop_apps.txt");
+    if let Ok(cache_dir) = colony_ui::paths::cache_dir(crate::PROGRAM) {
+        let cache_path = cache_dir.join("desktop_apps.txt");
         if let Some(parent) = cache_path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -275,8 +275,9 @@ fn save_desktop_cache(names: &HashSet<String>) {
 
 /// Try to load desktop app names from cache. Returns None if cache is stale or missing.
 fn load_desktop_cache() -> Option<HashSet<String>> {
-    let cache_dir = dirs::cache_dir()?;
-    let cache_path = cache_dir.join("digger").join("desktop_apps.txt");
+    // locate:: — a stale-cache check should not create the directory.
+    let cache_dir = colony_ui::paths::locate::cache_dir(crate::PROGRAM).ok()?;
+    let cache_path = cache_dir.join("desktop_apps.txt");
     let metadata = std::fs::metadata(&cache_path).ok()?;
     let modified = metadata.modified().ok()?;
     // Cache is valid for 1 hour
