@@ -213,4 +213,17 @@ mod tests {
         assert_eq!(prefs.live_buffer_size, 120);
         assert!(!prefs.use_dyslexic_font);
     }
+    #[test]
+    fn a_realistic_old_preferences_file_keeps_its_theme() {
+        let old = r#"{"theme":"KanagawaDragon","accent":"Amber","refresh_interval_secs":2,
+            "temp_celsius":true,"process_limit":200,"auto_theme":false}"#;
+        let p: Preferences = serde_json::from_str(old).unwrap();
+        assert!(
+            p.theme.is("kanagawa", "dragon"),
+            "theme became {:?}",
+            p.theme
+        );
+        assert!(p.accent.is("amber"), "accent became {:?}", p.accent);
+        assert_eq!(p.refresh_interval_secs, 2);
+    }
 }
