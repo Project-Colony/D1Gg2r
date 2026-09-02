@@ -136,9 +136,13 @@ fn send_notification(title: &str, body: &str) {
 }
 
 // ─── ANIMATION CONSTANTS ────────────────────────────────────────
+/// The About page used to hardcode "0.1.0" and "Iced 0.13 + Rust", both of
+/// which had gone stale. The version now comes from Cargo; this one still has
+/// to be written down, but next to the dependency it describes.
+const ICED_VERSION: &str = "Iced 0.14 + Rust";
+
 const ANIM_TICK_MS: u64 = 33; // ~30fps for animations
 const TWEEN_SPEED: f32 = 0.12; // lerp factor per animation tick
-const FADE_SPEED: f32 = 0.08; // fade-in speed per tick
 const PULSE_SPEED: f32 = 0.05; // pulse cycle speed
 
 const EVENT_LOG_MAX: usize = 100;
@@ -280,8 +284,13 @@ pub enum SettingsSection {
     // Appearance
     Theme,
     Accent,
+    // Appearance
+    Typography,
     // Accessibility
     Fonts,
+    Vision,
+    Motion,
+    Reading,
     // About
     Version,
     FontInfo,
@@ -317,7 +326,6 @@ pub struct Digger {
     // Language
     language: Language,
     /// Monospace font for the current language's script.
-    ui_mono: iced::Font,
     // New configurable fields
     process_limit: usize,
     use_dyslexic_font: bool,
@@ -346,8 +354,6 @@ pub struct Digger {
     anim_mem_pct: f32,
     /// Smoothly interpolated per-core CPU values
     anim_cores: Vec<f32>,
-    /// Page fade-in opacity (0.0 → 1.0)
-    page_opacity: f32,
     /// Pulse phase for critical alerts (0.0 → 2*PI cycle)
     pulse_phase: f32,
     /// Heart beat phase (0.0 → 2*PI), advances based on BPM
@@ -430,7 +436,6 @@ impl Digger {
             },
             accent_color: prefs.accent.clone(),
             language: prefs.language,
-            ui_mono: font_for_lang(prefs.language),
             pal: build_palette(
                 &if prefs.auto_theme {
                     auto_theme_choice()
@@ -459,7 +464,6 @@ impl Digger {
             anim_cpu: snap.cpu_usage_global,
             anim_mem_pct: mem_pct,
             anim_cores: snap.cpu_usage_per_core.clone(),
-            page_opacity: 1.0,
             pulse_phase: 0.0,
             heart_phase: 0.0,
             prev_tab: Tab::Overview,
@@ -494,12 +498,24 @@ impl Digger {
     /// how the dyslexia font came to be persisted but never applied.
     fn refresh_appearance(&mut self) {
         self.pal = build_palette(&self.theme_variant, &self.accent_color, self.high_contrast);
-        self.ui_mono = app_font(self.language, self.use_dyslexic_font);
         self.typo = typography_for(self.language, self.use_dyslexic_font);
         // The two size preferences multiply — see design/typography.md.
         self.typo.scale = self.font_scale * self.text_scale;
         colony_ui::set_high_contrast(self.high_contrast);
         sync_shared_state(&self.theme_variant, &self.accent_color, self.language);
+    }
+
+    /// The opacity of a pulsing critical indicator.
+    ///
+    /// Flat when the user has asked for reduced motion — and flat at full
+    /// opacity rather than at the bottom of the pulse, so silencing the
+    /// animation does not also dim the thing it was drawing attention to.
+    fn pulse_opacity(&self) -> f32 {
+        if self.reduced_motion {
+            1.0
+        } else {
+            self.pulse_opacity()
+        }
     }
 
     /// Get the current translation strings.
@@ -750,7 +766,7 @@ impl Digger {
             }
             Message::AnimTick => {
                 // Opt #4: Skip animation work when values have converged.
-                let mut needs_anim = self.page_opacity < 1.0;
+                let mut needs_anim = false;
 
                 if let Some(snap) = &self.current {
                     let target_cpu = snap.cpu_usage_global;
@@ -759,6 +775,17 @@ impl Digger {
                     } else {
                         0.0
                     };
+
+                    // Reduced motion snaps instead of tweening. The gauges still
+                    // have to track the data — a frozen gauge is a broken
+                    // readout, not a calmer one — so what stops is the travel
+                    // between two values, not the values.
+                    if self.reduced_motion {
+                        self.anim_cpu = target_cpu;
+                        self.anim_mem_pct = target_mem;
+                        self.anim_cores = snap.cpu_usage_per_core.clone();
+                        return;
+                    }
 
                     // Only tween if not converged (threshold: 0.1%)
                     if (target_cpu - self.anim_cpu).abs() > 0.1 {
@@ -791,11 +818,6 @@ impl Digger {
                     }
                 }
 
-                // Page fade-in
-                if self.page_opacity < 1.0 {
-                    self.page_opacity = (self.page_opacity + FADE_SPEED).min(1.0);
-                }
-
                 // Pulse & heartbeat always advance (cheap arithmetic)
                 self.pulse_phase += PULSE_SPEED;
                 if self.pulse_phase > std::f32::consts::TAU {
@@ -814,10 +836,6 @@ impl Digger {
             Message::TabSelected(tab) => {
                 self.prev_tab = self.tab;
                 self.tab = tab;
-                // Trigger fade-in on page change
-                if tab != self.prev_tab {
-                    self.page_opacity = 0.0;
-                }
                 if tab == Tab::History {
                     // Force immediate reload on tab switch
                     self.history_last_reload = 0.0;
@@ -826,9 +844,7 @@ impl Digger {
                 }
             }
             Message::OverviewSection(s) => {
-                if s != self.overview_panel {
-                    self.page_opacity = 0.0;
-                }
+                if s != self.overview_panel {}
                 self.overview_panel = s;
             }
             Message::ProcessFilterChanged(f) => self.process_filter = f,
@@ -853,12 +869,9 @@ impl Digger {
             Message::ToggleSettings => {
                 self.prev_show_settings = self.show_settings;
                 self.show_settings = !self.show_settings;
-                self.page_opacity = 0.0;
             }
             Message::SettingsPanelSelected(p) => {
-                if p != self.settings_panel {
-                    self.page_opacity = 0.0;
-                }
+                if p != self.settings_panel {}
                 self.settings_panel = p;
             }
             Message::SetRefreshInterval(secs) => {
@@ -1053,27 +1066,22 @@ impl Digger {
                             "1" => {
                                 self.prev_tab = self.tab;
                                 self.tab = Tab::Overview;
-                                self.page_opacity = 0.0;
                             }
                             "2" => {
                                 self.prev_tab = self.tab;
                                 self.tab = Tab::Processes;
-                                self.page_opacity = 0.0;
                             }
                             "3" => {
                                 self.prev_tab = self.tab;
                                 self.tab = Tab::History;
-                                self.page_opacity = 0.0;
                             }
                             "4" => {
                                 self.prev_tab = self.tab;
                                 self.tab = Tab::EventLog;
-                                self.page_opacity = 0.0;
                             }
                             "s" | "," => {
                                 self.prev_show_settings = self.show_settings;
                                 self.show_settings = !self.show_settings;
-                                self.page_opacity = 0.0;
                             }
                             "g" if self.tab == Tab::Processes => {
                                 self.process_grouped = !self.process_grouped;
@@ -1088,7 +1096,6 @@ impl Digger {
                     keyboard::Key::Named(Named::Escape) => {
                         if self.show_settings {
                             self.show_settings = false;
-                            self.page_opacity = 0.0;
                         }
                     }
                     keyboard::Key::Named(Named::Tab)
@@ -1102,7 +1109,6 @@ impl Digger {
                             Tab::History => Tab::EventLog,
                             Tab::EventLog => Tab::Overview,
                         };
-                        self.page_opacity = 0.0;
                     }
                     keyboard::Key::Named(Named::Tab)
                         if modifiers.shift() && !self.show_settings =>
@@ -1115,7 +1121,6 @@ impl Digger {
                             Tab::History => Tab::Processes,
                             Tab::EventLog => Tab::History,
                         };
-                        self.page_opacity = 0.0;
                     }
                     _ => {}
                 }
@@ -1174,28 +1179,28 @@ impl Digger {
                 Tab::Overview,
                 self.tab,
                 p,
-                self.ui_mono
+                &self.typo
             ),
             menu_tab(
                 &self.cached_tab_processes,
                 Tab::Processes,
                 self.tab,
                 p,
-                self.ui_mono
+                &self.typo
             ),
             menu_tab(
                 &self.cached_tab_history,
                 Tab::History,
                 self.tab,
                 p,
-                self.ui_mono
+                &self.typo
             ),
             menu_tab(
                 &self.cached_tab_events,
                 Tab::EventLog,
                 self.tab,
                 p,
-                self.ui_mono
+                &self.typo
             ),
         ]
         .spacing(4);
@@ -1206,7 +1211,7 @@ impl Digger {
             &self.cached_digger_label
         };
         let accent = p.accent;
-        let digger_btn = button(text(digger_label).size(15).color(accent))
+        let digger_btn = button(text(digger_label).size(self.typo.sz(15)).color(accent))
             .on_press(Message::ToggleSettings)
             .style(button::text)
             .padding([2, 4]);
@@ -1223,8 +1228,14 @@ impl Digger {
         } else {
             p.red
         };
-        // Sharp beat curve: sin clamped to positive half, squared for snappy pulse
-        let beat = self.heart_phase.sin().max(0.0).powi(2);
+        // Sharp beat curve: sin clamped to positive half, squared for snappy
+        // pulse. Flat under reduced motion — the colour still carries the
+        // health reading, so the icon loses its beat and nothing else.
+        let beat = if self.reduced_motion {
+            0.0
+        } else {
+            self.heart_phase.sin().max(0.0).powi(2)
+        };
         let heart_size = 10.0 + beat * 4.0; // 10px base, up to 14px on beat
         let health_el: Element<Message> = row![
             container(text(ICON_HEART).size(heart_size).color(heart_color))
@@ -1233,8 +1244,8 @@ impl Digger {
                 .align_x(Alignment::Center)
                 .align_y(Alignment::Center),
             text(format!(" {:.0}", bpm))
-                .size(10)
-                .font(self.ui_mono)
+                .size(self.typo.sz(10))
+                .font(self.typo.regular)
                 .color(heart_color),
         ]
         .spacing(0)
@@ -1244,7 +1255,7 @@ impl Digger {
         // Status bar with alerts/errors/messages
         let status_el: Element<Message> = if let Some(msg) = &self.status_message {
             let warning_color = p.yellow;
-            text(msg).size(10).color(warning_color).into()
+            text(msg).size(self.typo.sz(10)).color(warning_color).into()
         } else {
             Space::new().into()
         };
@@ -1259,10 +1270,10 @@ impl Digger {
                     p.yellow
                 };
             row![
-                text(ICON_LOG).size(10).color(badge_color),
+                text(ICON_LOG).size(self.typo.sz(10)).color(badge_color),
                 text(format!(" {}", event_count))
-                    .size(10)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(10))
+                    .font(self.typo.regular)
                     .color(badge_color),
             ]
             .spacing(0)
@@ -1279,15 +1290,15 @@ impl Digger {
             Space::new().width(6),
             event_badge,
             Space::new().width(8),
-            text(ICON_SEPARATOR).size(14).color(border_c),
+            text(ICON_SEPARATOR).size(self.typo.sz(14)).color(border_c),
             Space::new().width(8),
             status_el,
             Space::new().width(Length::Fill),
             tabs,
             Space::new().width(Length::Fill),
             text(chrono::Local::now().format("%H:%M:%S").to_string())
-                .size(13)
-                .font(self.ui_mono)
+                .size(self.typo.sz(13))
+                .font(self.typo.regular)
                 .color(text_c),
         ]
         .align_y(Alignment::Center)
@@ -1329,13 +1340,13 @@ impl Digger {
 
         let title_row = row![
             text(format!("{ICON_LOG} {}", t.event_log))
-                .size(13)
-                .font(self.ui_mono)
+                .size(self.typo.sz(13))
+                .font(self.typo.regular)
                 .color(p.accent),
             Space::new().width(Length::Fill),
             text(format!("{} {}", self.event_log.len(), t.events))
-                .size(11)
-                .font(self.ui_mono)
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
                 .color(label_c),
         ]
         .padding([6, 10])
@@ -1345,10 +1356,15 @@ impl Digger {
 
         if self.event_log.is_empty() {
             rows.push(
-                container(text(t.no_events).size(12).font(self.ui_mono).color(label_c))
-                    .padding([20, 10])
-                    .center_x(Length::Fill)
-                    .into(),
+                container(
+                    text(t.no_events)
+                        .size(self.typo.sz(12))
+                        .font(self.typo.regular)
+                        .color(label_c),
+                )
+                .padding([20, 10])
+                .center_x(Length::Fill)
+                .into(),
             );
         } else {
             for (i, ev) in self.event_log.iter().rev().enumerate() {
@@ -1361,12 +1377,15 @@ impl Digger {
                 let r = container(
                     row![
                         text(&*ev.timestamp)
-                            .size(10)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(10))
+                            .font(self.typo.regular)
                             .color(label_c)
                             .width(80),
-                        text(ev.icon).size(11).color(sev_color).width(20),
-                        text(&ev.message).size(11).color(p.text),
+                        text(ev.icon)
+                            .size(self.typo.sz(11))
+                            .color(sev_color)
+                            .width(20),
+                        text(&ev.message).size(self.typo.sz(11)).color(p.text),
                     ]
                     .spacing(6)
                     .align_y(Alignment::Center),
@@ -1400,35 +1419,35 @@ impl Digger {
                     SettingsPanel::General,
                     self.settings_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 settings_sidebar_item(
                     format!("{ICON_PAINT}  {}", self.t().appearance),
                     SettingsPanel::Appearance,
                     self.settings_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 settings_sidebar_item(
                     format!("{ICON_ACCESS}  {}", self.t().accessibility),
                     SettingsPanel::Accessibility,
                     self.settings_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 settings_sidebar_item(
                     format!("{ICON_NETWORK}  {}", self.t().language),
                     SettingsPanel::Language,
                     self.settings_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 settings_sidebar_item(
                     format!("{ICON_INFO}  {}", self.t().about_digger),
                     SettingsPanel::About,
                     self.settings_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
             ]
             .spacing(2)
@@ -1478,12 +1497,12 @@ impl Digger {
 
         let title = column![
             text(t.general_settings)
-                .size(16)
-                .font(self.ui_mono)
+                .size(self.typo.sz(16))
+                .font(self.typo.regular)
                 .color(text_c),
             text(t.settings_saved_auto)
-                .size(11)
-                .font(self.ui_mono)
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
                 .color(label_c),
         ]
         .spacing(4);
@@ -1494,8 +1513,8 @@ impl Digger {
             let color = if is_active { accent } else { label_c };
             let btn = button(
                 text(format!("{secs}s"))
-                    .size(11)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(11))
+                    .font(self.typo.regular)
                     .color(color),
             )
             .on_press(Message::SetRefreshInterval(secs))
@@ -1511,12 +1530,12 @@ impl Digger {
         let refresh_row = row![
             column![
                 text(t.refresh_rate)
-                    .size(12)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(12))
+                    .font(self.typo.regular)
                     .color(text_c),
                 text(t.refresh_rate_desc)
-                    .size(10)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(10))
+                    .font(self.typo.regular)
                     .color(label_c),
             ]
             .spacing(2)
@@ -1532,7 +1551,7 @@ impl Digger {
             } else {
                 ICON_TOGGLE_OFF
             })
-            .size(22)
+            .size(self.typo.sz(22))
             .color(if self.temp_celsius { accent } else { label_c }),
         )
         .on_press(Message::ToggleTempUnit)
@@ -1548,12 +1567,12 @@ impl Digger {
         let temp_row = row![
             column![
                 text(t.temperature_unit)
-                    .size(12)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(12))
+                    .font(self.typo.regular)
                     .color(text_c),
                 text(format!("{} {temp_label}", t.currently))
-                    .size(10)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(10))
+                    .font(self.typo.regular)
                     .color(label_c),
             ]
             .spacing(2)
@@ -1573,19 +1592,19 @@ impl Digger {
         let process_limit_row = row![
             column![
                 text(t.process_limit)
-                    .size(12)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(12))
+                    .font(self.typo.regular)
                     .color(text_c),
                 text(t.process_limit_desc)
-                    .size(10)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(10))
+                    .font(self.typo.regular)
                     .color(label_c),
             ]
             .spacing(2)
             .width(Length::FillPortion(2)),
             text(format!("{}", self.process_limit))
-                .size(12)
-                .font(self.ui_mono)
+                .size(self.typo.sz(12))
+                .font(self.typo.regular)
                 .color(accent),
         ]
         .align_y(Alignment::Center)
@@ -1594,19 +1613,19 @@ impl Digger {
         let history_points_row = row![
             column![
                 text(t.history_buffer)
-                    .size(12)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(12))
+                    .font(self.typo.regular)
                     .color(text_c),
                 text(t.history_buffer_desc)
-                    .size(10)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(10))
+                    .font(self.typo.regular)
                     .color(label_c),
             ]
             .spacing(2)
             .width(Length::FillPortion(2)),
             text(format!("{}", self.live_max))
-                .size(12)
-                .font(self.ui_mono)
+                .size(self.typo.sz(12))
+                .font(self.typo.regular)
                 .color(accent),
         ]
         .align_y(Alignment::Center)
@@ -1615,19 +1634,19 @@ impl Digger {
         let retention_row = row![
             column![
                 text(t.history_retention)
-                    .size(12)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(12))
+                    .font(self.typo.regular)
                     .color(text_c),
                 text(t.history_retention_desc)
-                    .size(10)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(10))
+                    .font(self.typo.regular)
                     .color(label_c),
             ]
             .spacing(2)
             .width(Length::FillPortion(2)),
             text(format!("{}h", self.retention_hours))
-                .size(12)
-                .font(self.ui_mono)
+                .size(self.typo.sz(12))
+                .font(self.typo.regular)
                 .color(accent),
         ]
         .align_y(Alignment::Center)
@@ -1661,17 +1680,20 @@ impl Digger {
         let mut data_items: Vec<Element<Message>> = vec![row![
             column![
                 text(t.history_database)
-                    .size(12)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(12))
+                    .font(self.typo.regular)
                     .color(text_c),
                 text(t.history_database_desc)
-                    .size(10)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(10))
+                    .font(self.typo.regular)
                     .color(label_c),
             ]
             .spacing(2)
             .width(Length::FillPortion(2)),
-            text(db_status).size(11).font(self.ui_mono).color(db_color),
+            text(db_status)
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
+                .color(db_color),
         ]
         .align_y(Alignment::Center)
         .spacing(12)
@@ -1682,7 +1704,7 @@ impl Digger {
             data_items.push(Space::new().height(6).into());
             data_items.push(
                 text(format!("{ICON_WARNING} {err}"))
-                    .size(10)
+                    .size(self.typo.sz(10))
                     .color(p.red)
                     .into(),
             );
@@ -1702,7 +1724,7 @@ impl Digger {
             Message::SetCpuAlertThreshold,
             accent,
             label_c,
-            self.ui_mono,
+            &self.typo,
         );
         let mem_alert_btns = make_threshold_buttons(
             self.mem_alert_threshold,
@@ -1710,7 +1732,7 @@ impl Digger {
             Message::SetMemAlertThreshold,
             accent,
             label_c,
-            self.ui_mono,
+            &self.typo,
         );
 
         let alerts_section = self.section(
@@ -1721,12 +1743,12 @@ impl Digger {
                 row![
                     column![
                         text(t.cpu_threshold)
-                            .size(12)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(12))
+                            .font(self.typo.regular)
                             .color(text_c),
                         text(t.cpu_threshold_desc)
-                            .size(10)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(10))
+                            .font(self.typo.regular)
                             .color(label_c),
                     ]
                     .spacing(2)
@@ -1739,12 +1761,12 @@ impl Digger {
                 row![
                     column![
                         text(t.memory_threshold)
-                            .size(12)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(12))
+                            .font(self.typo.regular)
                             .color(text_c),
                         text(t.memory_threshold_desc)
-                            .size(10)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(10))
+                            .font(self.typo.regular)
                             .color(label_c),
                     ]
                     .spacing(2)
@@ -1779,11 +1801,11 @@ impl Digger {
         let title = column![
             text(t.appearance)
                 .size(self.typo.sz(16))
-                .font(self.ui_mono)
+                .font(self.typo.regular)
                 .color(p.text),
             text(t.appearance_desc)
                 .size(self.typo.sz(11))
-                .font(self.ui_mono)
+                .font(self.typo.regular)
                 .color(p.label),
         ]
         .spacing(4);
@@ -1824,12 +1846,27 @@ impl Digger {
             }),
         );
 
+        let typography_section = self.section(
+            SettingsSection::Typography,
+            t.typography,
+            t.typography_desc,
+            self.scale_picker(
+                t.font_size,
+                t.font_size_desc,
+                FONT_SCALES,
+                self.font_scale,
+                Message::SetFontScale,
+            ),
+        );
+
         column![
             title,
             Space::new().height(12),
             theme_section,
             Space::new().height(6),
             accent_section,
+            Space::new().height(6),
+            typography_section,
         ]
         .spacing(4)
         .into()
@@ -1849,7 +1886,7 @@ impl Digger {
         let body = column![
             text(description)
                 .size(self.typo.sz(11))
-                .font(self.ui_mono)
+                .font(self.typo.regular)
                 .color(self.pal.label),
             Space::new().height(8),
             content,
@@ -1865,76 +1902,157 @@ impl Digger {
 
     fn view_settings_accessibility(&self) -> Element<'_, Message> {
         let p = &self.pal;
-        let text_c = p.text;
-        let label_c = p.label;
-        let accent = p.accent;
         let t = self.t();
 
         let title = column![
             text(t.accessibility)
-                .size(16)
-                .font(self.ui_mono)
-                .color(text_c),
+                .size(self.typo.sz(16))
+                .font(self.typo.regular)
+                .color(p.text),
             text(t.accessibility_desc)
-                .size(11)
-                .font(self.ui_mono)
-                .color(label_c),
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
+                .color(p.label),
         ]
         .spacing(4);
 
-        let dyslexic_toggle = button(
-            text(if self.use_dyslexic_font {
-                ICON_TOGGLE_ON
-            } else {
-                ICON_TOGGLE_OFF
-            })
-            .size(22)
-            .color(if self.use_dyslexic_font {
-                accent
-            } else {
-                label_c
-            }),
-        )
-        .on_press(Message::ToggleDyslexicFont)
-        .style(button::text)
-        .padding(0);
+        let vision = self.section(
+            SettingsSection::Vision,
+            t.vision,
+            t.vision_desc,
+            colony_ui::widgets::functional_toggle(
+                &self.typo,
+                t.high_contrast,
+                t.high_contrast_desc,
+                self.high_contrast,
+                Message::ToggleHighContrast,
+            ),
+        );
 
-        let font_status = if self.use_dyslexic_font {
-            t.enabled
-        } else {
-            t.disabled
-        };
+        let motion = self.section(
+            SettingsSection::Motion,
+            t.motion,
+            t.motion_desc,
+            colony_ui::widgets::functional_toggle(
+                &self.typo,
+                t.reduced_motion,
+                t.reduced_motion_desc,
+                self.reduced_motion,
+                Message::ToggleReducedMotion,
+            ),
+        );
 
-        let font_section = self.section(
+        let reading = self.section(
+            SettingsSection::Reading,
+            t.reading,
+            t.reading_desc,
+            self.scale_picker(
+                t.text_size,
+                t.text_size_desc,
+                TEXT_SCALES,
+                self.text_scale,
+                Message::SetTextScale,
+            ),
+        );
+
+        let fonts = self.section(
             SettingsSection::Fonts,
             t.fonts,
             t.fonts_desc,
-            column![row![
-                column![
-                    text(t.dyslexic_font)
-                        .size(12)
-                        .font(self.ui_mono)
-                        .color(text_c),
-                    text(format!(
-                        "{} {} {font_status}",
-                        t.dyslexic_font_desc, t.currently
-                    ))
-                    .size(10)
-                    .font(self.ui_mono)
-                    .color(label_c),
-                ]
-                .spacing(2)
-                .width(Length::FillPortion(2)),
-                dyslexic_toggle,
-            ]
-            .align_y(Alignment::Center)
-            .spacing(12),]
-            .into(),
+            colony_ui::widgets::functional_toggle(
+                &self.typo,
+                t.dyslexic_font,
+                t.dyslexic_font_desc,
+                self.use_dyslexic_font,
+                Message::ToggleDyslexicFont,
+            ),
         );
 
-        column![title, Space::new().height(16), font_section,]
-            .spacing(4)
-            .into()
+        column![
+            title,
+            Space::new().height(16),
+            vision,
+            Space::new().height(6),
+            motion,
+            Space::new().height(6),
+            reading,
+            Space::new().height(6),
+            fonts,
+        ]
+        .spacing(4)
+        .into()
+    }
+
+    /// A row of size steps, the selected one filled with the accent.
+    ///
+    /// Deliberately not a slider: there are three or four steps, each with a
+    /// name, and a slider would invite the values in between — which the
+    /// preferences sanitiser snaps away anyway.
+    fn scale_picker<'a>(
+        &'a self,
+        title: &'a str,
+        description: &'a str,
+        steps: &'static [f32],
+        current: f32,
+        on_select: fn(usize) -> Message,
+    ) -> Element<'a, Message> {
+        let t = self.t();
+        let label_for = |scale: f32| match scale {
+            s if s < 0.9 => t.size_small,
+            s if s < 1.1 => t.size_default,
+            s if s < 1.3 => t.size_large,
+            _ => t.size_xlarge,
+        };
+
+        let mut buttons: Vec<Element<Message>> = Vec::new();
+        for (idx, &step) in steps.iter().enumerate() {
+            // Compare against the step rather than an index: the stored value is
+            // a multiplier, and the two pickers do not offer the same steps.
+            let selected = (current - step).abs() < f32::EPSILON;
+            let (bg, fg) = if selected {
+                (self.pal.accent, colony_ui::contrast_on(self.pal.accent))
+            } else {
+                (self.pal.panel_bg, self.pal.label)
+            };
+            buttons.push(
+                button(
+                    text(label_for(step))
+                        // The label previews the size it selects, which is the
+                        // whole point of a size setting.
+                        .size(self.typo.sz(12) * step)
+                        .font(self.typo.regular)
+                        .color(fg),
+                )
+                .on_press(on_select(idx))
+                .padding([6, 12])
+                .style(move |_: &Theme, _status| button::Style {
+                    background: Some(Background::Color(bg)),
+                    text_color: fg,
+                    border: Border {
+                        color: Color::TRANSPARENT,
+                        width: 0.0,
+                        radius: 8.0.into(),
+                    },
+                    ..Default::default()
+                })
+                .into(),
+            );
+        }
+
+        column![
+            text(title)
+                .size(self.typo.sz(12))
+                .font(self.typo.regular)
+                .color(self.pal.text),
+            text(description)
+                .size(self.typo.sz(10))
+                .font(self.typo.regular)
+                .color(self.pal.label),
+            Space::new().height(8),
+            Row::with_children(buttons).spacing(8),
+        ]
+        .spacing(2)
+        .into()
     }
 
     fn view_settings_language(&self) -> Element<'_, Message> {
@@ -1947,10 +2065,13 @@ impl Digger {
         let t = self.t();
 
         let title = column![
-            text(t.language).size(16).font(self.ui_mono).color(text_c),
+            text(t.language)
+                .size(self.typo.sz(16))
+                .font(self.typo.regular)
+                .color(text_c),
             text(t.language_desc)
-                .size(11)
-                .font(self.ui_mono)
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
                 .color(label_c),
         ]
         .spacing(4);
@@ -1964,13 +2085,13 @@ impl Digger {
                     self.language.english_name()
                 };
                 text(format!("{ICON_CHECK} {name}"))
-                    .size(12)
+                    .size(self.typo.sz(12))
                     .color(accent)
                     .font(font_for_lang(self.language))
             },
             Space::new().width(8),
             text(format!("({})", self.language.code()))
-                .size(11)
+                .size(self.typo.sz(11))
                 .color(label_c),
         ])
         .padding([8, 12])
@@ -2021,7 +2142,10 @@ impl Digger {
                         Color::from_rgba(lang_accent.r, lang_accent.g, lang_accent.b, 0.05);
 
                     let check: Element<Message> = if is_active {
-                        text(ICON_CHECK).size(11).color(lang_accent).into()
+                        text(ICON_CHECK)
+                            .size(self.typo.sz(11))
+                            .color(lang_accent)
+                            .into()
                     } else {
                         Space::new().into()
                     };
@@ -2038,11 +2162,11 @@ impl Digger {
                                     lang.english_name()
                                 };
                                 text(name)
-                                    .size(11)
+                                    .size(self.typo.sz(11))
                                     .font(font_for_lang(lang))
                                     .color(name_color)
                             },
-                            text(lang.code()).size(9).color(lang_label_c),
+                            text(lang.code()).size(self.typo.sz(9)).color(lang_label_c),
                         ]
                         .spacing(1),
                     ]
@@ -2097,12 +2221,12 @@ impl Digger {
 
         let title = column![
             text(t.about_digger)
-                .size(16)
-                .font(self.ui_mono)
+                .size(self.typo.sz(16))
+                .font(self.typo.regular)
                 .color(text_c),
             text(t.about_desc)
-                .size(11)
-                .font(self.ui_mono)
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
                 .color(label_c),
         ]
         .spacing(4);
@@ -2112,10 +2236,10 @@ impl Digger {
             t.version,
             "",
             column![
-                info_row(t.application, "Digger", p, self.ui_mono),
-                info_row(t.version, "0.1.0", p, self.ui_mono),
-                info_row(t.framework, "Iced 0.13 + Rust", p, self.ui_mono),
-                info_row(t.license, "GPL-3.0-or-later", p, self.ui_mono),
+                info_row(t.application, "Digger", p, &self.typo),
+                info_row(t.version, env!("CARGO_PKG_VERSION"), p, &self.typo),
+                info_row(t.framework, ICED_VERSION, p, &self.typo),
+                info_row(t.license, "GPL-3.0-or-later", p, &self.typo),
             ]
             .spacing(6)
             .into(),
@@ -2126,10 +2250,10 @@ impl Digger {
             t.fonts,
             "",
             column![
-                info_row(t.ui_font, "Iosevka Nerd Font Propo", p, self.ui_mono),
-                info_row(t.mono_font, "Iosevka Nerd Font Mono", p, self.ui_mono),
-                info_row(t.dyslexic_font_label, "OpenDyslexic", p, self.ui_mono),
-                info_row(t.nerd_fonts, "v3.4.0", p, self.ui_mono),
+                info_row(t.ui_font, "Iosevka Nerd Font Propo", p, &self.typo),
+                info_row(t.mono_font, "Iosevka Nerd Font Mono", p, &self.typo),
+                info_row(t.dyslexic_font_label, "OpenDyslexic", p, &self.typo),
+                info_row(t.nerd_fonts, "v3.4.0", p, &self.typo),
             ]
             .spacing(6)
             .into(),
@@ -2138,24 +2262,19 @@ impl Digger {
         // System info section
         let sys_items = if let Some(snap) = &self.current {
             column![
-                info_row(t.hostname, &snap.sys_info.hostname, p, self.ui_mono),
-                info_row(t.os, &snap.sys_info.os_name, p, self.ui_mono),
-                info_row(t.os_version, &snap.sys_info.os_version, p, self.ui_mono),
-                info_row(t.kernel, &snap.sys_info.kernel_version, p, self.ui_mono),
-                info_row(t.cpu, &snap.cpu_name, p, self.ui_mono),
-                info_row(t.cores, snap.cpu_core_count.to_string(), p, self.ui_mono),
-                info_row(
-                    t.total_ram,
-                    format_bytes(snap.memory_total),
-                    p,
-                    self.ui_mono
-                ),
+                info_row(t.hostname, &snap.sys_info.hostname, p, &self.typo),
+                info_row(t.os, &snap.sys_info.os_name, p, &self.typo),
+                info_row(t.os_version, &snap.sys_info.os_version, p, &self.typo),
+                info_row(t.kernel, &snap.sys_info.kernel_version, p, &self.typo),
+                info_row(t.cpu, &snap.cpu_name, p, &self.typo),
+                info_row(t.cores, snap.cpu_core_count.to_string(), p, &self.typo),
+                info_row(t.total_ram, format_bytes(snap.memory_total), p, &self.typo),
             ]
             .spacing(6)
         } else {
             column![text(t.waiting_for_data)
-                .size(11)
-                .font(self.ui_mono)
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
                 .color(label_c),]
         };
 
@@ -2187,8 +2306,8 @@ impl Digger {
         let Some(snap) = &self.current else {
             return container(
                 text(format!("{ICON_LOADING} {}", t.collecting_data))
-                    .size(14)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(14))
+                    .font(self.typo.regular)
                     .color(p.label),
             )
             .center_x(Length::Fill)
@@ -2228,7 +2347,7 @@ impl Digger {
                     OverviewPanel::Cpu,
                     self.overview_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 make_spark(cpu_spark_data, p.accent),
                 sidebar_item(
@@ -2238,7 +2357,7 @@ impl Digger {
                     OverviewPanel::Memory,
                     self.overview_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 make_spark(mem_spark_data, p.green),
                 sidebar_item(
@@ -2251,7 +2370,7 @@ impl Digger {
                     OverviewPanel::Disk,
                     self.overview_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 make_spark(disk_io_spark, p.cyan),
                 sidebar_item(
@@ -2261,7 +2380,7 @@ impl Digger {
                     OverviewPanel::Network,
                     self.overview_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 sidebar_item(
                     format!("{ICON_TEMP} {}", t.temp),
@@ -2270,7 +2389,7 @@ impl Digger {
                     OverviewPanel::Temperature,
                     self.overview_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 sidebar_item(
                     format!("{ICON_GPU} {}", t.gpu),
@@ -2283,20 +2402,20 @@ impl Digger {
                     OverviewPanel::Gpu,
                     self.overview_panel,
                     p,
-                    self.ui_mono,
+                    &self.typo,
                 ),
                 // Load Average (small display at bottom of sidebar)
                 Space::new().height(Length::Fill),
                 text(format!("{ICON_LOAD} {}", t.load))
-                    .size(10)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(10))
+                    .font(self.typo.regular)
                     .color(p.label),
                 text(format!(
                     "{:.2}  {:.2}  {:.2}",
                     snap.load_avg[0], snap.load_avg[1], snap.load_avg[2]
                 ))
-                .size(10)
-                .font(self.ui_mono)
+                .size(self.typo.sz(10))
+                .font(self.typo.regular)
                 .color(p.text),
             ]
             .spacing(2)
@@ -2346,7 +2465,7 @@ impl Digger {
         // Pulse effect: if CPU exceeds threshold, pulse the chart title
         let is_critical = self.anim_cpu >= self.cpu_alert_threshold;
         let pulse_alpha = if is_critical {
-            0.7 + 0.3 * self.pulse_phase.sin().abs()
+            self.pulse_opacity()
         } else {
             1.0
         };
@@ -2386,20 +2505,20 @@ impl Digger {
         // Load average info
         let load_info: Row<Message> = row![
             text(format!("{ICON_LOAD} {}", t.load_avg))
-                .size(10)
-                .font(self.ui_mono)
+                .size(self.typo.sz(10))
+                .font(self.typo.regular)
                 .color(p.label),
             text(format!(" 1m {:.2}", snap.load_avg[0]))
-                .size(10)
-                .font(self.ui_mono)
+                .size(self.typo.sz(10))
+                .font(self.typo.regular)
                 .color(p.text),
             text(format!("  5m {:.2}", snap.load_avg[1]))
-                .size(10)
-                .font(self.ui_mono)
+                .size(self.typo.sz(10))
+                .font(self.typo.regular)
                 .color(p.text),
             text(format!("  15m {:.2}", snap.load_avg[2]))
-                .size(10)
-                .font(self.ui_mono)
+                .size(self.typo.sz(10))
+                .font(self.typo.regular)
                 .color(p.text),
         ]
         .spacing(2)
@@ -2425,14 +2544,14 @@ impl Digger {
                     let color = gradient_color(usage / 100.0, p);
                     let core = row![
                         text(format!("C{idx:<2}"))
-                            .size(10)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(10))
+                            .font(self.typo.regular)
                             .color(p.label)
                             .width(26),
                         themed_bar(usage, color, p.bar_bg),
                         text(format!("{usage:>3.0}%"))
-                            .size(10)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(10))
+                            .font(self.typo.regular)
                             .color(color)
                             .width(36),
                     ]
@@ -2449,27 +2568,27 @@ impl Digger {
 
         let uptime = format_duration(snap.uptime_secs);
         let info = column![
-            info_row(t.model, &snap.cpu_name, p, self.ui_mono),
+            info_row(t.model, &snap.cpu_name, p, &self.typo),
             info_row(
                 t.logical_cores,
                 snap.cpu_core_count.to_string(),
                 p,
-                self.ui_mono
+                &self.typo
             ),
             info_row(
                 t.base_speed,
                 format!("{} MHz", snap.cpu_frequency_mhz),
                 p,
-                self.ui_mono
+                &self.typo
             ),
             info_row(
                 t.utilization,
                 format!("{:.1}%", self.anim_cpu),
                 p,
-                self.ui_mono
+                &self.typo
             ),
-            info_row(t.processes, snap.process_count.to_string(), p, self.ui_mono),
-            info_row(t.uptime, &uptime, p, self.ui_mono),
+            info_row(t.processes, snap.process_count.to_string(), p, &self.typo),
+            info_row(t.uptime, &uptime, p, &self.typo),
         ]
         .spacing(4);
 
@@ -2481,10 +2600,10 @@ impl Digger {
                 Space::new().height(4),
                 Element::from(load_info),
                 Space::new().height(6),
-                section_title(t.per_core_usage, p, self.ui_mono),
+                section_title(t.per_core_usage, p, &self.typo),
                 cores_grid,
                 Space::new().height(6),
-                section_title(t.system_info, p, self.ui_mono),
+                section_title(t.system_info, p, &self.typo),
                 info,
             ]
             .spacing(4)
@@ -2503,7 +2622,7 @@ impl Digger {
         // Pulse effect for memory threshold
         let is_critical = display_mem >= self.mem_alert_threshold;
         let pulse_alpha = if is_critical {
-            0.7 + 0.3 * self.pulse_phase.sin().abs()
+            self.pulse_opacity()
         } else {
             1.0
         };
@@ -2540,10 +2659,10 @@ impl Digger {
                     format_bytes(snap.memory_total)
                 ),
                 p,
-                self.ui_mono
+                &self.typo
             ),
-            info_row(t.available, format_bytes(available), p, self.ui_mono),
-            info_row(t.usage, format!("{:.1}%", display_mem), p, self.ui_mono),
+            info_row(t.available, format_bytes(available), p, &self.typo),
+            info_row(t.usage, format!("{:.1}%", display_mem), p, &self.typo),
         ]
         .spacing(4);
 
@@ -2554,7 +2673,7 @@ impl Digger {
                 snap.memory_total,
                 p.green,
                 p,
-                self.ui_mono
+                &self.typo
             ),
             labeled_bar(
                 "Swap",
@@ -2562,7 +2681,7 @@ impl Digger {
                 snap.swap_total,
                 p.yellow,
                 p,
-                self.ui_mono
+                &self.typo
             ),
         ]
         .spacing(6);
@@ -2583,14 +2702,14 @@ impl Digger {
                     format_bytes(snap.swap_total)
                 ),
                 p,
-                self.ui_mono
+                &self.typo
             ),
-            info_row(t.swap_usage, format!("{:.1}%", swap_pct), p, self.ui_mono),
+            info_row(t.swap_usage, format!("{:.1}%", swap_pct), p, &self.typo),
             info_row(
                 t.virtual_memory_total,
                 format_bytes(total_virt),
                 p,
-                self.ui_mono
+                &self.typo
             ),
         ]
         .spacing(4);
@@ -2619,10 +2738,10 @@ impl Digger {
                 Space::new().height(8),
                 bars,
                 Space::new().height(8),
-                section_title("RAM", p, self.ui_mono),
+                section_title("RAM", p, &self.typo),
                 info,
                 Space::new().height(8),
-                section_title(t.swap, p, self.ui_mono),
+                section_title(t.swap, p, &self.typo),
                 swap_info,
             ]
             .spacing(4)
@@ -2678,13 +2797,13 @@ impl Digger {
                 format!("{ICON_ARROW_DOWN} {}", t.receive),
                 format!("{}/s", format_bytes(snap.net_rx_bytes)),
                 p,
-                self.ui_mono
+                &self.typo
             ),
             info_row(
                 format!("{ICON_ARROW_UP} {}", t.send),
                 format!("{}/s", format_bytes(snap.net_tx_bytes)),
                 p,
-                self.ui_mono
+                &self.typo
             ),
         ]
         .spacing(4);
@@ -2695,18 +2814,21 @@ impl Digger {
         let mut iface_items: Vec<Element<Message>> = Vec::new();
         for iface in &snap.net_interfaces {
             let item = row![
-                text(&iface.name).size(11).color(text_c).width(140),
+                text(&iface.name)
+                    .size(self.typo.sz(11))
+                    .color(text_c)
+                    .width(140),
                 text(format!(
                     "{ICON_ARROW_DOWN} {}",
                     format_bytes(iface.rx_bytes)
                 ))
-                .size(11)
-                .font(self.ui_mono)
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
                 .color(green)
                 .width(110),
                 text(format!("{ICON_ARROW_UP} {}", format_bytes(iface.tx_bytes)))
-                    .size(11)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(11))
+                    .font(self.typo.regular)
                     .color(red)
                     .width(110),
             ]
@@ -2719,10 +2841,10 @@ impl Digger {
             column![
                 net_chart,
                 Space::new().height(8),
-                section_title(t.throughput, p, self.ui_mono),
+                section_title(t.throughput, p, &self.typo),
                 totals,
                 Space::new().height(8),
-                section_title(t.interfaces, p, self.ui_mono),
+                section_title(t.interfaces, p, &self.typo),
                 Column::with_children(iface_items).spacing(3),
             ]
             .spacing(4)
@@ -2755,20 +2877,20 @@ impl Digger {
             row![
                 column![
                     text(format!("{} {}", snap.disks.len(), t.drives))
-                        .size(20)
-                        .font(self.ui_mono)
+                        .size(self.typo.sz(20))
+                        .font(self.typo.regular)
                         .color(text_c),
                     text(format!("{:.1}% {}", total_pct, t.overall_usage))
-                        .size(11)
-                        .font(self.ui_mono)
+                        .size(self.typo.sz(11))
+                        .font(self.typo.regular)
                         .color(label_c),
                 ]
                 .spacing(4)
                 .width(Length::FillPortion(1)),
                 column![
-                    info_row(t.total_capacity, format_bytes(total_space), p, self.ui_mono),
-                    info_row(t.total_used, format_bytes(total_used), p, self.ui_mono),
-                    info_row(t.total_free, format_bytes(total_avail), p, self.ui_mono),
+                    info_row(t.total_capacity, format_bytes(total_space), p, &self.typo),
+                    info_row(t.total_used, format_bytes(total_used), p, &self.typo),
+                    info_row(t.total_free, format_bytes(total_avail), p, &self.typo),
                 ]
                 .spacing(4)
                 .width(Length::FillPortion(1)),
@@ -2815,10 +2937,12 @@ impl Digger {
             let disk_card = container(
                 column![
                     row![
-                        text(format!("{icon} {}", &d.mount)).size(14).color(text_c),
+                        text(format!("{icon} {}", &d.mount))
+                            .size(self.typo.sz(14))
+                            .color(text_c),
                         Space::new().width(Length::Fill),
                         text(format!("{} {ICON_BULLET} {}", &d.name, disk_type))
-                            .size(10)
+                            .size(self.typo.sz(10))
                             .color(label_c),
                     ],
                     Space::new().height(6),
@@ -2826,40 +2950,40 @@ impl Digger {
                     Space::new().height(6),
                     row![
                         text(format!("{:.1}%", pct))
-                            .size(14)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(14))
+                            .font(self.typo.regular)
                             .color(color),
                         Space::new().width(Length::Fill),
                         text(format!("{} {}", format_bytes(used), t.used))
-                            .size(11)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(11))
+                            .font(self.typo.regular)
                             .color(text_c),
                         Space::new().width(12),
                         text(format!("{} {}", format_bytes(d.available), t.free))
-                            .size(11)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(11))
+                            .font(self.typo.regular)
                             .color(green),
                         Space::new().width(12),
                         text(format!("{} {}", format_bytes(d.total), t.total))
-                            .size(11)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(11))
+                            .font(self.typo.regular)
                             .color(label_c),
                     ],
                     Space::new().height(8),
                     row![
                         column![
-                            info_row(t.file_system, &d.fs_type, p, self.ui_mono),
-                            info_row(t.mount_point, &d.mount, p, self.ui_mono),
+                            info_row(t.file_system, &d.fs_type, p, &self.typo),
+                            info_row(t.mount_point, &d.mount, p, &self.typo),
                         ]
                         .spacing(3)
                         .width(Length::FillPortion(1)),
                         column![
-                            info_row(t.device, &d.name, p, self.ui_mono),
+                            info_row(t.device, &d.name, p, &self.typo),
                             info_row(
                                 t.type_label,
                                 if d.is_removable { t.removable } else { t.fixed },
                                 p,
-                                self.ui_mono
+                                &self.typo
                             ),
                         ]
                         .spacing(3)
@@ -2894,13 +3018,13 @@ impl Digger {
                 format!("{ICON_ARROW_DOWN} {}", t.read),
                 format!("{}/s", format_bytes(snap.disk_io.read_bytes)),
                 p,
-                self.ui_mono
+                &self.typo
             ),
             info_row(
                 format!("{ICON_ARROW_UP} {}", t.write),
                 format!("{}/s", format_bytes(snap.disk_io.write_bytes)),
                 p,
-                self.ui_mono
+                &self.typo
             ),
         ]
         .spacing(4);
@@ -2908,10 +3032,10 @@ impl Digger {
         let disk_title = format!("{ICON_DISK} {}", t.disk_drives);
         panel(
             column![
-                section_title(&disk_title, p, self.ui_mono),
+                section_title(&disk_title, p, &self.typo),
                 summary,
                 Space::new().height(8),
-                section_title(t.io_throughput, p, self.ui_mono),
+                section_title(t.io_throughput, p, &self.typo),
                 disk_io_info,
                 Space::new().height(8),
                 Column::with_children(disk_items).spacing(8),
@@ -2938,10 +3062,10 @@ impl Digger {
         if snap.temperatures.is_empty() {
             return panel(
                 column![
-                    section_title(&temp_title, p, self.ui_mono),
+                    section_title(&temp_title, p, &self.typo),
                     text(t.no_sensors)
-                        .size(12)
-                        .font(self.ui_mono)
+                        .size(self.typo.sz(12))
+                        .font(self.typo.regular)
                         .color(label_c),
                 ]
                 .spacing(6)
@@ -2963,8 +3087,14 @@ impl Digger {
             let temp_str = format_temp(t.temp_c, self.temp_celsius);
             let item = container(
                 row![
-                    text(&t.label).size(11).color(text_c).width(Length::Fill),
-                    text(temp_str).size(11).font(self.ui_mono).color(color),
+                    text(&t.label)
+                        .size(self.typo.sz(11))
+                        .color(text_c)
+                        .width(Length::Fill),
+                    text(temp_str)
+                        .size(self.typo.sz(11))
+                        .font(self.typo.regular)
+                        .color(color),
                 ]
                 .spacing(8)
                 .align_y(Alignment::Center),
@@ -2997,25 +3127,25 @@ impl Digger {
                 t.sensors,
                 snap.temperatures.len().to_string(),
                 p,
-                self.ui_mono
+                &self.typo
             ),
             info_row(
                 t.minimum,
                 format_temp(min_t, self.temp_celsius),
                 p,
-                self.ui_mono
+                &self.typo
             ),
             info_row(
                 t.maximum,
                 format_temp(max_t, self.temp_celsius),
                 p,
-                self.ui_mono
+                &self.typo
             ),
             info_row(
                 t.average,
                 format_temp(avg_t, self.temp_celsius),
                 p,
-                self.ui_mono
+                &self.typo
             ),
         ]
         .spacing(4);
@@ -3023,10 +3153,10 @@ impl Digger {
         let temp_overview_title = format!("{ICON_TEMP} {}", t.temperature_overview);
         panel(
             column![
-                section_title(&temp_overview_title, p, self.ui_mono),
+                section_title(&temp_overview_title, p, &self.typo),
                 summary,
                 Space::new().height(8),
-                section_title(t.all_sensors, p, self.ui_mono),
+                section_title(t.all_sensors, p, &self.typo),
                 Column::with_children(temp_items).spacing(0),
             ]
             .spacing(4)
@@ -3045,8 +3175,11 @@ impl Digger {
         if snap.gpu.gpus.is_empty() {
             return panel(
                 column![
-                    section_title(format!("{ICON_GPU} {}", t.gpu), p, self.ui_mono),
-                    text(t.no_gpu).size(12).font(self.ui_mono).color(label_c),
+                    section_title(format!("{ICON_GPU} {}", t.gpu), p, &self.typo),
+                    text(t.no_gpu)
+                        .size(self.typo.sz(12))
+                        .font(self.typo.regular)
+                        .color(label_c),
                 ]
                 .spacing(6)
                 .into(),
@@ -3072,19 +3205,19 @@ impl Digger {
 
             gpu_items.push(
                 column![
-                    text(&gpu.name).size(14).color(text_c),
+                    text(&gpu.name).size(self.typo.sz(14)).color(text_c),
                     Space::new().height(4),
                     info_row(
                         t.utilization,
                         format!("{}%", gpu.utilization),
                         p,
-                        self.ui_mono
+                        &self.typo
                     ),
                     info_row(
                         t.temperature,
                         format!("{:.0}°C", gpu.temperature),
                         p,
-                        self.ui_mono
+                        &self.typo
                     ),
                     info_row(
                         t.vram,
@@ -3094,10 +3227,10 @@ impl Digger {
                             format_bytes(gpu.memory_total)
                         ),
                         p,
-                        self.ui_mono
+                        &self.typo
                     ),
-                    info_row(t.vram_usage, format!("{:.1}%", mem_pct), p, self.ui_mono),
-                    info_row(t.power, format!("{:.1}W", gpu.power_watts), p, self.ui_mono),
+                    info_row(t.vram_usage, format!("{:.1}%", mem_pct), p, &self.typo),
+                    info_row(t.power, format!("{:.1}W", gpu.power_watts), p, &self.typo),
                     Space::new().height(4),
                     labeled_bar(
                         "Util",
@@ -3105,7 +3238,7 @@ impl Digger {
                         100,
                         util_color,
                         p,
-                        self.ui_mono
+                        &self.typo
                     ),
                     labeled_bar(
                         "VRAM",
@@ -3113,7 +3246,7 @@ impl Digger {
                         gpu.memory_total,
                         p.magenta,
                         p,
-                        self.ui_mono
+                        &self.typo
                     ),
                 ]
                 .spacing(4)
@@ -3123,7 +3256,7 @@ impl Digger {
 
         panel(
             column![
-                section_title(format!("{ICON_GPU} {}", t.gpu), p, self.ui_mono),
+                section_title(format!("{ICON_GPU} {}", t.gpu), p, &self.typo),
                 Column::with_children(gpu_items).spacing(12),
             ]
             .spacing(4)
@@ -3150,8 +3283,8 @@ impl Digger {
         let Some(snap) = &self.current else {
             return container(
                 text(format!("{ICON_LOADING} {}", t.collecting_data))
-                    .size(14)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(14))
+                    .font(self.typo.regular)
                     .color(label_c),
             )
             .center_x(Length::Fill)
@@ -3172,8 +3305,8 @@ impl Digger {
 
         let filter_row = row![
             text(format!("{ICON_SEARCH} {}", t.filter))
-                .size(11)
-                .font(self.ui_mono)
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
                 .color(label_c),
             Space::new().width(4),
             text_input(t.search, &self.process_filter)
@@ -3182,8 +3315,8 @@ impl Digger {
             Space::new().width(12),
             button(
                 text(format!("{ICON_BARS} {group_label}"))
-                    .size(11)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(11))
+                    .font(self.typo.regular)
                     .color(group_color)
             )
             .on_press(Message::ToggleGrouped)
@@ -3195,8 +3328,8 @@ impl Digger {
                 snap.processes.len(),
                 t.processes
             ))
-            .size(11)
-            .font(self.ui_mono)
+            .size(self.typo.sz(11))
+            .font(self.typo.regular)
             .color(label_c),
         ]
         .spacing(6)
@@ -3234,35 +3367,39 @@ impl Digger {
                     format!("PID {}", si(ProcessSort::Pid)),
                     ProcessSort::Pid,
                     60,
-                    accent
+                    accent,
+                    &self.typo
                 ),
-                text("PPID").size(11).color(accent).width(50),
+                text("PPID").size(self.typo.sz(11)).color(accent).width(50),
                 sort_btn(
                     format!("{} {}", t.command, si(ProcessSort::Name)),
                     ProcessSort::Name,
                     180,
-                    accent
+                    accent,
+                    &self.typo
                 ),
                 sort_btn(
                     format!("CPU% {}", si(ProcessSort::Cpu)),
                     ProcessSort::Cpu,
                     70,
-                    accent
+                    accent,
+                    &self.typo
                 ),
                 sort_btn(
                     format!("{} {}", t.memory, si(ProcessSort::Memory)),
                     ProcessSort::Memory,
                     90,
-                    accent
+                    accent,
+                    &self.typo
                 ),
-                text("St").size(11).color(accent).width(25),
+                text("St").size(self.typo.sz(11)).color(accent).width(25),
                 text(format!("{ICON_THREAD} Thr"))
-                    .size(11)
+                    .size(self.typo.sz(11))
                     .color(accent)
                     .width(40),
                 text(t.action)
-                    .size(11)
-                    .font(self.ui_mono)
+                    .size(self.typo.sz(11))
+                    .font(self.typo.regular)
                     .color(accent)
                     .width(60),
             ]
@@ -3344,8 +3481,8 @@ impl Digger {
                 let hdr_bg = sidebar_bg;
                 let section_hdr = container(
                     text(format!("{icon} {label} ({})", list.len()))
-                        .size(11)
-                        .font(self.ui_mono)
+                        .size(self.typo.sz(11))
+                        .font(self.typo.regular)
                         .color(color),
                 )
                 .padding([4, 10])
@@ -3367,7 +3504,7 @@ impl Digger {
                         row_bg,
                         p,
                         self.cpu_alert_threshold,
-                        self.ui_mono,
+                        &self.typo,
                     ));
                     row_idx += 1;
                 }
@@ -3396,7 +3533,7 @@ impl Digger {
                     row_bg,
                     p,
                     self.cpu_alert_threshold,
-                    self.ui_mono,
+                    &self.typo,
                 ));
             }
         }
@@ -3419,8 +3556,8 @@ impl Digger {
         let mut range_btns: Vec<Element<Message>> = Vec::new();
         range_btns.push(
             text(format!("{ICON_CLOCK} {}", t.range))
-                .size(11)
-                .font(self.ui_mono)
+                .size(self.typo.sz(11))
+                .font(self.typo.regular)
                 .color(label_c)
                 .into(),
         );
@@ -3428,7 +3565,7 @@ impl Digger {
         for (i, (_, label)) in HISTORY_RANGES.iter().enumerate() {
             let is_active = self.history_range_idx == i;
             let color = if is_active { accent } else { label_c };
-            let btn = button(text(*label).size(11).color(color))
+            let btn = button(text(*label).size(self.typo.sz(11)).color(color))
                 .on_press(Message::HistoryRangeSelected(i))
                 .style(if is_active {
                     button::primary
@@ -3442,18 +3579,26 @@ impl Digger {
         // Export buttons
         range_btns.push(Space::new().width(Length::Fill).into());
         range_btns.push(
-            button(text(format!("{ICON_EXPORT} CSV")).size(11).color(label_c))
-                .on_press(Message::ExportCsv)
-                .style(button::secondary)
-                .padding([3, 10])
-                .into(),
+            button(
+                text(format!("{ICON_EXPORT} CSV"))
+                    .size(self.typo.sz(11))
+                    .color(label_c),
+            )
+            .on_press(Message::ExportCsv)
+            .style(button::secondary)
+            .padding([3, 10])
+            .into(),
         );
         range_btns.push(
-            button(text(format!("{ICON_EXPORT} JSON")).size(11).color(label_c))
-                .on_press(Message::ExportJson)
-                .style(button::secondary)
-                .padding([3, 10])
-                .into(),
+            button(
+                text(format!("{ICON_EXPORT} JSON"))
+                    .size(self.typo.sz(11))
+                    .color(label_c),
+            )
+            .on_press(Message::ExportJson)
+            .style(button::secondary)
+            .padding([3, 10])
+            .into(),
         );
 
         let range_row = Row::with_children(range_btns).spacing(4).padding([6, 10]);
@@ -3465,8 +3610,8 @@ impl Digger {
                     Space::new().height(20),
                     container(
                         text(format!("{ICON_HISTORY} {}", t.no_history_data))
-                            .size(13)
-                            .font(self.ui_mono)
+                            .size(self.typo.sz(13))
+                            .font(self.typo.regular)
                             .color(label_c)
                     )
                     .center_x(Length::Fill),
@@ -3666,7 +3811,7 @@ fn sidebar_item<'a>(
     target: OverviewPanel,
     current: OverviewPanel,
     p: &Palette,
-    mono_font: iced::Font,
+    typo: &colony_ui::Typography,
 ) -> Element<'a, Message> {
     let is_active = target == current;
     let sidebar_bg = p.sidebar_bg;
@@ -3690,11 +3835,11 @@ fn sidebar_item<'a>(
 
     let content = column![
         text(label)
-            .size(12)
+            .size(typo.sz(12))
             .color(if is_active { color } else { label_c }),
         text(value)
-            .size(13)
-            .font(mono_font)
+            .size(typo.sz(13))
+            .font(typo.regular)
             .color(if is_active { text_c } else { label_c }),
     ]
     .spacing(2);
@@ -3744,7 +3889,7 @@ fn settings_sidebar_item(
     target: SettingsPanel,
     current: SettingsPanel,
     p: &Palette,
-    mono_font: iced::Font,
+    typo: &colony_ui::Typography,
 ) -> Element<'static, Message> {
     let is_active = target == current;
     let accent = p.accent;
@@ -3759,8 +3904,8 @@ fn settings_sidebar_item(
 
     button(
         text(label.to_string())
-            .size(12)
-            .font(mono_font)
+            .size(typo.sz(12))
+            .font(typo.regular)
             .color(text_color),
     )
     .on_press(Message::SettingsPanelSelected(target))
@@ -3806,15 +3951,15 @@ fn info_row<'a>(
     label: impl ToString,
     value: impl ToString,
     p: &Palette,
-    mono_font: iced::Font,
+    typo: &colony_ui::Typography,
 ) -> Element<'a, Message> {
     let l = format!("{}:", label.to_string());
     let v = value.to_string();
     let label_c = p.label;
     let text_c = p.text;
     row![
-        text(l).size(11).color(label_c).width(120),
-        text(v).size(11).font(mono_font).color(text_c),
+        text(l).size(typo.sz(11)).color(label_c).width(120),
+        text(v).size(typo.sz(11)).font(typo.regular).color(text_c),
     ]
     .spacing(8)
     .into()
@@ -3825,7 +3970,7 @@ fn process_row<'a>(
     bg: Color,
     p: &'a Palette,
     cpu_threshold: f32,
-    mono_font: iced::Font,
+    typo: &colony_ui::Typography,
 ) -> Element<'a, Message> {
     let cpu_color = gradient_color(proc.cpu_usage / 100.0, p);
     let pid = proc.pid;
@@ -3866,17 +4011,24 @@ fn process_row<'a>(
         bg
     };
 
-    let kill_btn = button(text(ICON_KILL).size(10).color(label_c))
+    let kill_btn = button(text(ICON_KILL).size(typo.sz(10)).color(label_c))
         .on_press(Message::KillProcess(pid))
         .style(button::text)
         .padding([1, 4]);
 
     let name_col: Element<Message> = if cmd_str.is_empty() {
-        text(name.clone()).size(11).color(text_c).width(180).into()
+        text(name.clone())
+            .size(typo.sz(11))
+            .color(text_c)
+            .width(180)
+            .into()
     } else {
         tooltip(
-            text(name.clone()).size(11).color(text_c).width(180),
-            text(cmd_str).size(9).color(text_c),
+            text(name.clone())
+                .size(typo.sz(11))
+                .color(text_c)
+                .width(180),
+            text(cmd_str).size(typo.sz(9)).color(text_c),
             tooltip::Position::Top,
         )
         .style(move |_theme: &Theme| container::Style {
@@ -3898,25 +4050,29 @@ fn process_row<'a>(
     container(
         row![
             text(pid_str)
-                .size(11)
-                .font(mono_font)
+                .size(typo.sz(11))
+                .font(typo.regular)
                 .color(label_c)
                 .width(60),
             text(ppid_str)
-                .size(10)
-                .font(mono_font)
+                .size(typo.sz(10))
+                .font(typo.regular)
                 .color(label_c)
                 .width(50),
             name_col,
             text(cpu)
-                .size(11)
-                .font(mono_font)
+                .size(typo.sz(11))
+                .font(typo.regular)
                 .color(cpu_color)
                 .width(70),
-            text(mem).size(11).font(mono_font).color(accent).width(90),
+            text(mem)
+                .size(typo.sz(11))
+                .font(typo.regular)
+                .color(accent)
+                .width(90),
             text(String::from(proc.status))
-                .size(11)
-                .font(mono_font)
+                .size(typo.sz(11))
+                .font(typo.regular)
                 .color(match proc.status {
                     'R' => p.green,
                     'Z' => p.red,
@@ -3925,8 +4081,8 @@ fn process_row<'a>(
                 })
                 .width(25),
             text(proc.thread_count.to_string())
-                .size(11)
-                .font(mono_font)
+                .size(typo.sz(11))
+                .font(typo.regular)
                 .color(label_c)
                 .width(40),
             kill_btn,
@@ -3985,7 +4141,7 @@ fn menu_tab(
     tab: Tab,
     current: Tab,
     p: &Palette,
-    mono_font: iced::Font,
+    typo: &colony_ui::Typography,
 ) -> Element<'static, Message> {
     let is_active = tab == current;
     let accent = p.accent;
@@ -3995,8 +4151,8 @@ fn menu_tab(
     let hover_color = Color::from_rgba(accent.r, accent.g, accent.b, 0.15);
     button(
         text(label.to_string())
-            .size(12)
-            .font(mono_font)
+            .size(typo.sz(12))
+            .font(typo.regular)
             .color(color),
     )
     .on_press(Message::TabSelected(tab))
@@ -4034,12 +4190,12 @@ fn menu_tab(
 fn section_title(
     label: impl ToString,
     p: &Palette,
-    mono_font: iced::Font,
+    typo: &colony_ui::Typography,
 ) -> Element<'static, Message> {
     let accent = p.accent;
     text(label.to_string())
-        .size(11)
-        .font(mono_font)
+        .size(typo.sz(11))
+        .font(typo.regular)
         .color(accent)
         .into()
 }
@@ -4050,7 +4206,7 @@ fn labeled_bar(
     total: u64,
     color: Color,
     p: &Palette,
-    mono_font: iced::Font,
+    typo: &colony_ui::Typography,
 ) -> Element<'static, Message> {
     if total == 0 {
         return row![].into();
@@ -4059,11 +4215,14 @@ fn labeled_bar(
     let label_c = p.label;
     let bar_bg = p.bar_bg;
     row![
-        text(format!("{label}:")).size(11).color(label_c).width(60),
+        text(format!("{label}:"))
+            .size(typo.sz(11))
+            .color(label_c)
+            .width(60),
         themed_bar(pct, color, bar_bg),
         text(format!("{}/{}", format_bytes(used), format_bytes(total)))
-            .size(11)
-            .font(mono_font)
+            .size(typo.sz(11))
+            .font(typo.regular)
             .color(color)
             .width(150),
     ]
@@ -4077,8 +4236,9 @@ fn sort_btn(
     col: ProcessSort,
     width: u16,
     accent: Color,
+    typo: &colony_ui::Typography,
 ) -> Element<'static, Message> {
-    button(text(label).size(11).color(accent))
+    button(text(label).size(typo.sz(11)).color(accent))
         .on_press(Message::SortBy(col))
         .style(button::text)
         .padding([2, 4])
@@ -4143,7 +4303,7 @@ fn make_threshold_buttons<'a>(
     on_press: impl Fn(f32) -> Message + 'a,
     accent: Color,
     label_c: Color,
-    mono_font: iced::Font,
+    typo: &colony_ui::Typography,
 ) -> Element<'a, Message> {
     let mut btns: Vec<Element<Message>> = Vec::new();
     for &val in options {
@@ -4151,8 +4311,8 @@ fn make_threshold_buttons<'a>(
         let color = if is_active { accent } else { label_c };
         let btn = button(
             text(format!("{:.0}%", val))
-                .size(11)
-                .font(mono_font)
+                .size(typo.sz(11))
+                .font(typo.regular)
                 .color(color),
         )
         .on_press(on_press(val))

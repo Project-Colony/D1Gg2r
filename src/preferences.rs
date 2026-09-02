@@ -14,7 +14,12 @@ pub struct Preferences {
     /// The accent override, or "follow the theme" when unset.
     #[serde(default)]
     pub accent: AccentChoice,
+    /// Defaulted, like every other field: serde fails the whole struct on one
+    /// missing field, so a file that has lost a single key would otherwise
+    /// reset every setting the user ever changed.
+    #[serde(default = "default_refresh_interval")]
     pub refresh_interval_secs: u64,
+    #[serde(default = "default_temp_celsius")]
     pub temp_celsius: bool,
     /// Maximum number of processes displayed in the process list.
     #[serde(default = "default_process_limit")]
@@ -75,6 +80,12 @@ fn default_scale() -> f32 {
 pub const FONT_SCALES: &[f32] = &[0.85, 1.0, 1.2];
 pub const TEXT_SCALES: &[f32] = &[0.85, 1.0, 1.2, 1.4];
 
+fn default_refresh_interval() -> u64 {
+    1
+}
+fn default_temp_celsius() -> bool {
+    true
+}
 fn default_process_limit() -> usize {
     200
 }
@@ -115,8 +126,8 @@ impl Default for Preferences {
         Self {
             theme: ThemeChoice::default(),
             accent: AccentChoice::default(),
-            refresh_interval_secs: 1,
-            temp_celsius: true,
+            refresh_interval_secs: default_refresh_interval(),
+            temp_celsius: default_temp_celsius(),
             process_limit: default_process_limit(),
             live_buffer_size: default_live_buffer_size(),
             retention_hours: default_retention_hours(),
@@ -272,5 +283,45 @@ mod tests {
         );
         assert!(p.accent.is("amber"), "accent became {:?}", p.accent);
         assert_eq!(p.refresh_interval_secs, 2);
+    }
+
+    #[test]
+    fn a_scale_outside_the_offered_steps_snaps_to_one_of_them() {
+        // A hand-edited file, or one written by a version with different steps.
+        // Clamping to a range would leave 1.07 selected and no button lit.
+        let mut p = Preferences {
+            font_scale: 1.07,
+            text_scale: 3.0,
+            ..Preferences::default()
+        };
+        p.sanitize();
+        assert_eq!(p.font_scale, 1.0);
+        assert_eq!(p.text_scale, 1.4);
+        assert!(FONT_SCALES.contains(&p.font_scale));
+        assert!(TEXT_SCALES.contains(&p.text_scale));
+    }
+
+    #[test]
+    fn the_two_scales_multiply_to_the_documented_extremes() {
+        // design/typography.md: a layout has to survive 0.7225x and 1.68x.
+        let smallest = FONT_SCALES[0] * TEXT_SCALES[0];
+        let largest = FONT_SCALES[FONT_SCALES.len() - 1] * TEXT_SCALES[TEXT_SCALES.len() - 1];
+        assert!((smallest - 0.7225).abs() < 1e-4, "smallest is {smallest}");
+        assert!((largest - 1.68).abs() < 1e-4, "largest is {largest}");
+    }
+
+    #[test]
+    fn a_file_written_before_these_settings_existed_gets_the_defaults() {
+        let old = r#"{"theme":"GruvboxDark","accent":"Green","refresh_interval_secs":1}"#;
+        let p: Preferences = serde_json::from_str(old).unwrap();
+        assert!(
+            p.theme.is("gruvbox", "dark"),
+            "the theme it did have was lost"
+        );
+        assert!(p.temp_celsius, "a missing field must not reset the others");
+        assert_eq!(p.font_scale, 1.0);
+        assert_eq!(p.text_scale, 1.0);
+        assert!(!p.high_contrast);
+        assert!(!p.reduced_motion);
     }
 }
