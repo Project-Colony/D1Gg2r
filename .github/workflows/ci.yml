@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: fmt, clippy and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      # iced needs these to link on Linux; without them clippy fails before it
+      # has looked at a single line of Digger's own code.
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev pkg-config
+
+      - name: Formatting
+        run: cargo fmt --all --check
+
+      # The lint backlog was what let the About page keep claiming iced 0.13 and
+      # a dead fade-in keep its struct field. Warnings are errors so it stays at
+      # zero rather than growing back.
+      - name: Lints
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --all

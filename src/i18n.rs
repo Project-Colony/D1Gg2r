@@ -6,8 +6,9 @@
 use serde::{Deserialize, Serialize};
 
 /// All supported languages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum Language {
+    #[default]
     En,
     Fr,
     Es,
@@ -58,12 +59,6 @@ pub enum Language {
     Lt,
     Lv,
     Et,
-}
-
-impl Default for Language {
-    fn default() -> Self {
-        Language::En
-    }
 }
 
 impl Language {
@@ -487,6 +482,10 @@ pub struct Strings {
     pub theme_desc: &'static str,
     pub accent_color: &'static str,
     pub accent_color_desc: &'static str,
+    pub typography: &'static str,
+    pub typography_desc: &'static str,
+    pub font_size: &'static str,
+    pub font_size_desc: &'static str,
 
     // ─── Accessibility settings ───
     pub accessibility: &'static str,
@@ -497,6 +496,22 @@ pub struct Strings {
     pub dyslexic_font_desc: &'static str,
     pub enabled: &'static str,
     pub disabled: &'static str,
+    pub vision: &'static str,
+    pub vision_desc: &'static str,
+    pub high_contrast: &'static str,
+    pub high_contrast_desc: &'static str,
+    pub motion: &'static str,
+    pub motion_desc: &'static str,
+    pub reduced_motion: &'static str,
+    pub reduced_motion_desc: &'static str,
+    pub reading: &'static str,
+    pub reading_desc: &'static str,
+    pub text_size: &'static str,
+    pub text_size_desc: &'static str,
+    pub size_small: &'static str,
+    pub size_default: &'static str,
+    pub size_large: &'static str,
+    pub size_xlarge: &'static str,
 
     // ─── About ───
     pub about_digger: &'static str,
@@ -644,8 +659,29 @@ static EN: Strings = Strings {
     theme_desc: "Select a color theme.",
     accent_color: "Accent color",
     accent_color_desc: "Choose the accent color used for highlights.",
+    typography: "Typography",
+    typography_desc:
+        "Size of the interface text. Multiplies with the reading size in Accessibility.",
+    font_size: "Font size",
+    font_size_desc: "Applies everywhere at once.",
     accessibility: "Accessibility",
     accessibility_desc: "Options for improved readability.",
+    vision: "Vision",
+    vision_desc: "Contrast and legibility.",
+    high_contrast: "High contrast",
+    high_contrast_desc: "Deepens the current theme rather than replacing it.",
+    motion: "Motion",
+    motion_desc: "Animation and movement.",
+    reduced_motion: "Reduced motion",
+    reduced_motion_desc: "Stops the pulsing indicators and the animated transitions.",
+    reading: "Reading",
+    reading_desc: "Text size, on top of the Typography setting.",
+    text_size: "Text size",
+    text_size_desc: "Multiplies with Typography. Both at their largest is 1.68x.",
+    size_small: "Small",
+    size_default: "Default",
+    size_large: "Large",
+    size_xlarge: "Extra large",
     fonts: "Fonts",
     fonts_desc: "Alternative font options for better readability.",
     dyslexic_font: "OpenDyslexic font",
@@ -680,6 +716,9 @@ static EN: Strings = Strings {
 // Fields not specified fall back to English.
 macro_rules! lang {
     ($name:ident { $($field:ident : $val:expr),* $(,)? }) => {
+        // A table that happens to specify every field makes `..EN` dead, which
+        // is fine — the point is that most of them do not.
+        #[allow(clippy::needless_update)]
         static $name: Strings = Strings {
             $($field: $val,)*
             ..EN
@@ -803,8 +842,29 @@ lang!(FR {
     theme_desc: "Sélectionner un thème de couleurs.",
     accent_color: "Couleur d'accentuation",
     accent_color_desc: "Choisir la couleur d'accentuation pour les éléments en surbrillance.",
+    typography: "Typographie",
+    typography_desc:
+        "Taille du texte de l'interface. Se multiplie avec la taille de lecture dans Accessibilité.",
+    font_size: "Taille de police",
+    font_size_desc: "S'applique partout à la fois.",
     accessibility: "Accessibilité",
     accessibility_desc: "Options pour une meilleure lisibilité.",
+    vision: "Vision",
+    vision_desc: "Contraste et lisibilité.",
+    high_contrast: "Contraste élevé",
+    high_contrast_desc: "Accentue le thème actuel au lieu de le remplacer.",
+    motion: "Mouvement",
+    motion_desc: "Animations et déplacements.",
+    reduced_motion: "Mouvement réduit",
+    reduced_motion_desc: "Arrête les indicateurs pulsants et les transitions animées.",
+    reading: "Lecture",
+    reading_desc: "Taille du texte, en plus du réglage Typographie.",
+    text_size: "Taille du texte",
+    text_size_desc: "Se multiplie avec Typographie. Les deux au maximum donnent 1,68x.",
+    size_small: "Petit",
+    size_default: "Par défaut",
+    size_large: "Grand",
+    size_xlarge: "Très grand",
     fonts: "Polices",
     fonts_desc: "Polices alternatives pour une meilleure lisibilité.",
     dyslexic_font: "Police OpenDyslexic",

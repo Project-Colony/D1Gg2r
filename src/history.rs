@@ -11,6 +11,10 @@ const SQLITE_PARTS: [&str; 3] = ["", "-wal", "-shm"];
 /// Stored point for a single metric at a given time.
 #[derive(Clone, Debug)]
 pub struct HistoryPoint {
+    /// Read from the database and carried, but nothing draws it yet: the
+    /// history chart plots values against sample index rather than time. Kept
+    /// because dropping it would mean re-querying to label a time axis.
+    #[allow(dead_code)]
     pub timestamp: f64,
     pub cpu: f32,
     pub mem_used: u64,
