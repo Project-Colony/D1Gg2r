@@ -49,7 +49,31 @@ pub struct Preferences {
     /// Interface language.
     #[serde(default)]
     pub language: Language,
+    /// Appearance -> Typography. Multiplies with `text_scale`.
+    #[serde(default = "default_scale")]
+    pub font_scale: f32,
+    /// Accessibility -> Reading. Multiplies with `font_scale`; a user on large
+    /// typography and xlarge reading text is at 1.68x and the layout has to
+    /// survive it.
+    #[serde(default = "default_scale")]
+    pub text_scale: f32,
+    /// Accessibility -> Vision. Derives a boosted palette from the active one
+    /// rather than selecting a separate high-contrast theme.
+    #[serde(default)]
+    pub high_contrast: bool,
+    /// Accessibility -> Motion. Silences every animation when set.
+    #[serde(default)]
+    pub reduced_motion: bool,
 }
+
+fn default_scale() -> f32 {
+    1.0
+}
+
+/// The steps the two size settings offer, as (multiplier, label key index).
+/// Reading gets a fourth step; typography stops at large.
+pub const FONT_SCALES: &[f32] = &[0.85, 1.0, 1.2];
+pub const TEXT_SCALES: &[f32] = &[0.85, 1.0, 1.2, 1.4];
 
 fn default_process_limit() -> usize {
     200
@@ -68,6 +92,20 @@ fn default_cpu_alert_threshold() -> f32 {
 fn default_mem_alert_threshold() -> f32 {
     90.0
 }
+/// The offered step closest to `value`, so a hand-edited or future-version
+/// preferences file still lands on something the UI can show as selected.
+fn nearest(value: f32, steps: &[f32]) -> f32 {
+    *steps
+        .iter()
+        .min_by(|a, b| {
+            (*a - value)
+                .abs()
+                .partial_cmp(&(*b - value).abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .unwrap_or(&1.0)
+}
+
 fn default_process_sort() -> String {
     "cpu".into()
 }
@@ -90,6 +128,10 @@ impl Default for Preferences {
             process_sort_asc: false,
             auto_theme: false,
             language: Language::default(),
+            font_scale: default_scale(),
+            text_scale: default_scale(),
+            high_contrast: false,
+            reduced_motion: false,
         }
     }
 }
@@ -140,6 +182,11 @@ impl Preferences {
         if !REFRESH_OPTIONS.contains(&self.refresh_interval_secs) {
             self.refresh_interval_secs = 1;
         }
+        // A scale outside the offered steps reaches the layout as a size no
+        // widget was designed for, so snap to the nearest one rather than
+        // clamping to a range that still admits 1.07.
+        self.font_scale = nearest(self.font_scale, FONT_SCALES);
+        self.text_scale = nearest(self.text_scale, TEXT_SCALES);
     }
 
     pub fn save(&self) {

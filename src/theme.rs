@@ -157,8 +157,8 @@ pub struct Palette {
     pub blue: Color,
 }
 
-pub fn build_palette(theme: &ThemeChoice, accent: &AccentChoice) -> Palette {
-    let base = base_palette(theme);
+pub fn build_palette(theme: &ThemeChoice, accent: &AccentChoice, high_contrast: bool) -> Palette {
+    let base = base_palette_with(theme, high_contrast);
     let chosen = accent
         .key()
         .and_then(colony_ui::accent_key_to_color)
@@ -182,7 +182,20 @@ pub fn build_palette(theme: &ThemeChoice, accent: &AccentChoice) -> Palette {
 /// accent_icon and accent_progress: on most themes those two are the same
 /// colour, which would have quietly turned two chart lines into one.
 pub fn base_palette(theme: &ThemeChoice) -> Palette {
+    base_palette_with(theme, false)
+}
+
+/// High contrast is a parameter rather than a read of colony-ui's global,
+/// because `resolve` returns the raw palette: a program that derives its
+/// colours from `resolve` and sets the global would show the setting doing
+/// nothing at all.
+pub fn base_palette_with(theme: &ThemeChoice, high_contrast: bool) -> Palette {
     let p = colony_ui::resolve(&theme.family, &theme.variant);
+    let p = if high_contrast {
+        p.with_high_contrast()
+    } else {
+        p
+    };
     let series = |key: &str| colony_ui::accent_key_to_color(key).unwrap_or(p.accent_blue);
     let legible = |c: Color| readable_on(c, p.bg_primary, p.bg_card);
     Palette {
@@ -322,26 +335,28 @@ mod tests {
         let accents: Vec<_> = accents.collect();
 
         let mut failures = Vec::new();
-        for theme in all_themes() {
-            for accent in &accents {
-                let p = build_palette(&theme, accent);
-                let roles = [
-                    ("accent", p.accent),
-                    ("green", p.green),
-                    ("red", p.red),
-                    ("yellow", p.yellow),
-                    ("cyan", p.cyan),
-                    ("magenta", p.magenta),
-                    ("blue", p.blue),
-                ];
-                for (name, color) in roles {
-                    for (surface, bg) in [("bg", p.bg), ("panel", p.panel_bg)] {
-                        let ratio = contrast(color, bg);
-                        if ratio < MIN_SERIES_CONTRAST {
-                            failures.push(format!(
-                                "{}/{} {:?} {name} on {surface}: {ratio:.2}:1",
+        for high_contrast in [false, true] {
+            for theme in all_themes() {
+                for accent in &accents {
+                    let p = build_palette(&theme, accent, high_contrast);
+                    let roles = [
+                        ("accent", p.accent),
+                        ("green", p.green),
+                        ("red", p.red),
+                        ("yellow", p.yellow),
+                        ("cyan", p.cyan),
+                        ("magenta", p.magenta),
+                        ("blue", p.blue),
+                    ];
+                    for (name, color) in roles {
+                        for (surface, bg) in [("bg", p.bg), ("panel", p.panel_bg)] {
+                            let ratio = contrast(color, bg);
+                            if ratio < MIN_SERIES_CONTRAST {
+                                failures.push(format!(
+                                "{}/{} {:?} hc={high_contrast} {name} on {surface}: {ratio:.2}:1",
                                 theme.family, theme.variant, accent.0
                             ));
+                            }
                         }
                     }
                 }
@@ -463,7 +478,7 @@ mod tests {
         // And it resolves to the palette's own accent, not to a stored colour.
         let theme = ThemeChoice::new("gruvbox", "dark");
         assert_eq!(
-            build_palette(&theme, &got).accent,
+            build_palette(&theme, &got, false).accent,
             base_palette(&theme).accent
         );
     }

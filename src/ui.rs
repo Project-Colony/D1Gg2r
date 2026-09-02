@@ -17,7 +17,7 @@ use crate::history::History;
 use crate::i18n::{Language, Strings};
 use crate::icons::*;
 use crate::metrics::{Collector, LivePoint, Snapshot};
-use crate::preferences::Preferences;
+use crate::preferences::{Preferences, FONT_SCALES, TEXT_SCALES};
 use crate::ringbuf::RingBuffer;
 use crate::theme::{build_palette, AccentChoice, Palette, ThemeChoice};
 use crate::{DEJAVU_FONT, DYSLEXIC_FONT, NERD_FONT_MONO, NOTO_SANS_FONT, SARASA_FONT};
@@ -217,6 +217,10 @@ pub enum Message {
     /// `None` is "follow the theme", never a colour value.
     SetAccent(Option<String>),
     ToggleDyslexicFont,
+    ToggleHighContrast,
+    ToggleReducedMotion,
+    SetFontScale(usize),
+    SetTextScale(usize),
     // Export
     ExportCsv,
     ExportJson,
@@ -317,6 +321,10 @@ pub struct Digger {
     // New configurable fields
     process_limit: usize,
     use_dyslexic_font: bool,
+    high_contrast: bool,
+    reduced_motion: bool,
+    font_scale: f32,
+    text_scale: f32,
     retention_hours: u64,
     cpu_alert_threshold: f32,
     mem_alert_threshold: f32,
@@ -430,9 +438,14 @@ impl Digger {
                     prefs.theme.clone()
                 },
                 &prefs.accent,
+                prefs.high_contrast,
             ),
             process_limit: prefs.process_limit,
             use_dyslexic_font: prefs.use_dyslexic_font,
+            high_contrast: prefs.high_contrast,
+            reduced_motion: prefs.reduced_motion,
+            font_scale: prefs.font_scale,
+            text_scale: prefs.text_scale,
             retention_hours: prefs.retention_hours,
             cpu_alert_threshold: prefs.cpu_alert_threshold,
             mem_alert_threshold: prefs.mem_alert_threshold,
@@ -480,9 +493,12 @@ impl Digger {
     /// One method rather than four scattered assignments: the previous shape is
     /// how the dyslexia font came to be persisted but never applied.
     fn refresh_appearance(&mut self) {
-        self.pal = build_palette(&self.theme_variant, &self.accent_color);
+        self.pal = build_palette(&self.theme_variant, &self.accent_color, self.high_contrast);
         self.ui_mono = app_font(self.language, self.use_dyslexic_font);
         self.typo = typography_for(self.language, self.use_dyslexic_font);
+        // The two size preferences multiply — see design/typography.md.
+        self.typo.scale = self.font_scale * self.text_scale;
+        colony_ui::set_high_contrast(self.high_contrast);
         sync_shared_state(&self.theme_variant, &self.accent_color, self.language);
     }
 
@@ -873,6 +889,27 @@ impl Digger {
                 self.refresh_appearance();
                 self.save_prefs();
             }
+            Message::ToggleHighContrast => {
+                self.high_contrast = !self.high_contrast;
+                self.refresh_appearance();
+                self.save_prefs();
+            }
+            Message::ToggleReducedMotion => {
+                self.reduced_motion = !self.reduced_motion;
+                // Leave the animation phases where they are rather than
+                // resetting: a pulse frozen mid-beat is still a static icon.
+                self.save_prefs();
+            }
+            Message::SetFontScale(idx) => {
+                self.font_scale = FONT_SCALES.get(idx).copied().unwrap_or(1.0);
+                self.refresh_appearance();
+                self.save_prefs();
+            }
+            Message::SetTextScale(idx) => {
+                self.text_scale = TEXT_SCALES.get(idx).copied().unwrap_or(1.0);
+                self.refresh_appearance();
+                self.save_prefs();
+            }
             Message::ExportCsv => {
                 let range = HISTORY_RANGES[self.history_range_idx].0;
                 let now = chrono::Utc::now().timestamp_millis() as f64 / 1000.0;
@@ -1098,6 +1135,10 @@ impl Digger {
             cpu_alert_threshold: self.cpu_alert_threshold,
             mem_alert_threshold: self.mem_alert_threshold,
             use_dyslexic_font: self.use_dyslexic_font,
+            high_contrast: self.high_contrast,
+            reduced_motion: self.reduced_motion,
+            font_scale: self.font_scale,
+            text_scale: self.text_scale,
             process_grouped: self.process_grouped,
             process_sort: match self.process_sort {
                 ProcessSort::Pid => "pid",
