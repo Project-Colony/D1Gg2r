@@ -273,12 +273,10 @@ fn luminance(c: Color) -> f32 {
     0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
 }
 
-/// WCAG contrast ratio, 1.0 (identical) to 21.0 (black on white).
-fn contrast(a: Color, b: Color) -> f32 {
-    let (la, lb) = (luminance(a), luminance(b));
-    let (hi, lo) = if la > lb { (la, lb) } else { (lb, la) };
-    (hi + 0.05) / (lo + 0.05)
-}
+/// WCAG contrast ratio. colony-ui exposes this now, so Digger stops carrying
+/// its own copy — `luminance` stays because `readable_on` needs the value
+/// itself to decide which way to move, not just the ratio.
+use colony_ui::contrast_ratio as contrast;
 
 /// The floor for a chart line or a coloured status label: WCAG's non-text
 /// contrast minimum.
