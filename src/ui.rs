@@ -19,10 +19,22 @@ use crate::icons::*;
 use crate::metrics::{Collector, LivePoint, Snapshot};
 use crate::preferences::Preferences;
 use crate::ringbuf::RingBuffer;
-use crate::theme::{build_palette, AccentColor, Palette, ThemeVariant};
-use crate::{DEJAVU_FONT, NERD_FONT_MONO, NOTO_SANS_FONT, SARASA_FONT};
+use crate::theme::{build_palette, AccentChoice, Palette, ThemeChoice};
+use crate::{DEJAVU_FONT, DYSLEXIC_FONT, NERD_FONT_MONO, NOTO_SANS_FONT, SARASA_FONT};
 
 /// Returns the best available monospace font for a given language's script.
+/// The application font, and the only place it is decided.
+///
+/// The dyslexia font is a whole-application swap, not a per-widget option, so
+/// it wins over the script-specific choice below. It was previously stored and
+/// toggled but never consulted, which made the accessibility setting a no-op.
+fn app_font(lang: Language, dyslexic: bool) -> iced::Font {
+    if dyslexic {
+        return DYSLEXIC_FONT;
+    }
+    font_for_lang(lang)
+}
+
 fn font_for_lang(lang: Language) -> iced::Font {
     match lang {
         // CJK → Sarasa
@@ -76,6 +88,44 @@ fn system_prefers_dark() -> bool {
 }
 
 /// Send a desktop notification (non-blocking, best-effort).
+/// What "follow the system" resolves to. Catppuccin's two ends, because they
+/// are the default theme's own family — switching on the system preference
+/// should not also change which theme the user is looking at.
+fn auto_theme_choice() -> ThemeChoice {
+    if system_prefers_dark() {
+        ThemeChoice::new("catppuccin", "mocha")
+    } else {
+        ThemeChoice::new("catppuccin", "latte")
+    }
+}
+
+/// The shared widgets read the active theme, accent and locale from process
+/// globals rather than from arguments — a widget cannot reach the host's state.
+/// Every place Digger changes one of the three calls this, so the pickers never
+/// draw a theme the program is not actually using.
+fn sync_shared_state(theme: &ThemeChoice, accent: &AccentChoice, language: Language) {
+    colony_ui::set_active_theme(&theme.family, &theme.variant);
+    colony_ui::set_active_accent(accent.key().and_then(colony_ui::accent_key_to_color));
+    // colony-ui ships English and French; Digger ships twenty-five. Anything
+    // else falls back to English, which is what the theme names were before
+    // this — they were hardcoded English strings.
+    colony_ui::i18n::set_locale(match language {
+        Language::Fr => colony_ui::i18n::Locale::Fr,
+        _ => colony_ui::i18n::Locale::En,
+    });
+}
+
+/// Digger's fonts, in the shape the shared widgets expect.
+fn typography_for(language: Language, dyslexic: bool) -> colony_ui::Typography {
+    let base = app_font(language, dyslexic);
+    colony_ui::Typography {
+        scale: 1.0,
+        regular: base,
+        medium: base,
+        bold: base,
+    }
+}
+
 fn send_notification(title: &str, body: &str) {
     let _ = notify_rust::Notification::new()
         .summary(title)
@@ -158,8 +208,14 @@ pub enum Message {
     SetRefreshInterval(u64),
     ToggleTempUnit,
     ToggleSection(SettingsSection),
-    SetTheme(ThemeVariant),
-    SetAccent(AccentColor),
+    /// Catalog keys rather than an enum: the picker renders every family
+    /// colony-ui ships, so the set is not known at compile time.
+    SetTheme {
+        family: String,
+        variant: String,
+    },
+    /// `None` is "follow the theme", never a colour value.
+    SetAccent(Option<String>),
     ToggleDyslexicFont,
     // Export
     ExportCsv,
@@ -251,8 +307,8 @@ pub struct Digger {
     temp_celsius: bool,
     collapsed_sections: HashSet<SettingsSection>,
     // Theme
-    theme_variant: ThemeVariant,
-    accent_color: AccentColor,
+    theme_variant: ThemeChoice,
+    accent_color: AccentChoice,
     pal: Palette,
     // Language
     language: Language,
@@ -305,9 +361,9 @@ pub struct Digger {
     cached_tab_events: String,
     cached_digger_label: String,
     cached_digger_label_settings: String,
-    /// Cached theme preview palettes (rebuilt only when accent color changes).
-    cached_theme_previews: Vec<(ThemeVariant, Palette)>,
-    cached_theme_accent: AccentColor,
+    /// What the shared widgets need to know about Digger's text. They cannot
+    /// reach this state, so it is passed in on every call.
+    typo: colony_ui::Typography,
 }
 
 impl Digger {
@@ -335,7 +391,7 @@ impl Digger {
             disk_write: snap.disk_io.write_bytes,
         });
 
-        Self {
+        let mut app = Self {
             collector,
             history,
             current: Some(Arc::clone(&snap)),
@@ -360,28 +416,20 @@ impl Digger {
             temp_celsius: prefs.temp_celsius,
             collapsed_sections: HashSet::new(),
             theme_variant: if prefs.auto_theme {
-                if system_prefers_dark() {
-                    ThemeVariant::CatppuccinMocha
-                } else {
-                    ThemeVariant::CatppuccinLatte
-                }
+                auto_theme_choice()
             } else {
-                prefs.theme
+                prefs.theme.clone()
             },
-            accent_color: prefs.accent,
+            accent_color: prefs.accent.clone(),
             language: prefs.language,
             ui_mono: font_for_lang(prefs.language),
             pal: build_palette(
-                if prefs.auto_theme {
-                    if system_prefers_dark() {
-                        ThemeVariant::CatppuccinMocha
-                    } else {
-                        ThemeVariant::CatppuccinLatte
-                    }
+                &if prefs.auto_theme {
+                    auto_theme_choice()
                 } else {
-                    prefs.theme
+                    prefs.theme.clone()
                 },
-                prefs.accent,
+                &prefs.accent,
             ),
             process_limit: prefs.process_limit,
             use_dyslexic_font: prefs.use_dyslexic_font,
@@ -419,9 +467,23 @@ impl Digger {
             cached_tab_events: format!("{ICON_LOG}  {}", prefs.language.strings().tab_events),
             cached_digger_label: format!("{ICON_DIGGER} Digger"),
             cached_digger_label_settings: format!("{ICON_DIGGER} Digger  {ICON_CLOSE}"),
-            cached_theme_previews: Self::build_theme_previews(prefs.accent),
-            cached_theme_accent: prefs.accent,
-        }
+            typo: typography_for(prefs.language, prefs.use_dyslexic_font),
+        };
+        app.refresh_appearance();
+        app
+    }
+
+    /// Recompute everything that depends on the theme, the accent, the language
+    /// or the dyslexia font, and push the same three into colony-ui's globals so
+    /// the shared widgets draw what Digger is actually using.
+    ///
+    /// One method rather than four scattered assignments: the previous shape is
+    /// how the dyslexia font came to be persisted but never applied.
+    fn refresh_appearance(&mut self) {
+        self.pal = build_palette(&self.theme_variant, &self.accent_color);
+        self.ui_mono = app_font(self.language, self.use_dyslexic_font);
+        self.typo = typography_for(self.language, self.use_dyslexic_font);
+        sync_shared_state(&self.theme_variant, &self.accent_color, self.language);
     }
 
     /// Get the current translation strings.
@@ -436,27 +498,6 @@ impl Digger {
         self.cached_tab_processes = format!("{ICON_PROCESSES}  {}", t.tab_processes);
         self.cached_tab_history = format!("{ICON_HISTORY}  {}", t.tab_history);
         self.cached_tab_events = format!("{ICON_LOG}  {}", t.tab_events);
-    }
-
-    fn build_theme_previews(accent: AccentColor) -> Vec<(ThemeVariant, Palette)> {
-        use ThemeVariant::*;
-        let variants = [
-            CatppuccinLatte,
-            CatppuccinFrappe,
-            CatppuccinMacchiato,
-            CatppuccinMocha,
-            GruvboxLight,
-            GruvboxDark,
-            EverblushLight,
-            EverblushDark,
-            KanagawaLight,
-            KanagawaDark,
-            KanagawaDragon,
-        ];
-        variants
-            .iter()
-            .map(|&v| (v, build_palette(v, accent)))
-            .collect()
     }
 
     pub fn title(&self) -> String {
@@ -817,20 +858,19 @@ impl Digger {
                     self.collapsed_sections.insert(section);
                 }
             }
-            Message::SetTheme(variant) => {
-                self.theme_variant = variant;
-                self.pal = build_palette(variant, self.accent_color);
+            Message::SetTheme { family, variant } => {
+                self.theme_variant = ThemeChoice { family, variant };
+                self.refresh_appearance();
                 self.save_prefs();
             }
             Message::SetAccent(accent) => {
-                self.accent_color = accent;
-                self.pal = build_palette(self.theme_variant, accent);
-                self.cached_theme_previews = Self::build_theme_previews(accent);
-                self.cached_theme_accent = accent;
+                self.accent_color = AccentChoice(accent);
+                self.refresh_appearance();
                 self.save_prefs();
             }
             Message::ToggleDyslexicFont => {
                 self.use_dyslexic_font = !self.use_dyslexic_font;
+                self.refresh_appearance();
                 self.save_prefs();
             }
             Message::ExportCsv => {
@@ -963,7 +1003,7 @@ impl Digger {
             }
             Message::SetLanguage(lang) => {
                 self.language = lang;
-                self.ui_mono = font_for_lang(lang);
+                self.refresh_appearance();
                 self.rebuild_cached_strings();
                 self.save_prefs();
             }
@@ -1048,8 +1088,8 @@ impl Digger {
 
     fn save_prefs(&self) {
         let prefs = Preferences {
-            theme: self.theme_variant,
-            accent: self.accent_color,
+            theme: self.theme_variant.clone(),
+            accent: self.accent_color.clone(),
             refresh_interval_secs: self.refresh_interval_secs,
             temp_celsius: self.temp_celsius,
             process_limit: self.process_limit,
@@ -1482,15 +1522,11 @@ impl Digger {
         .align_y(Alignment::Center)
         .spacing(12);
 
-        let monitoring_section = collapsible_section(
+        let monitoring_section = self.section(
             SettingsSection::Monitoring,
             t.monitoring,
             t.monitoring_desc,
-            self.collapsed_sections
-                .contains(&SettingsSection::Monitoring),
             column![refresh_row, Space::new().height(12), temp_row,].into(),
-            p,
-            self.ui_mono,
         );
 
         let process_limit_row = row![
@@ -1556,11 +1592,10 @@ impl Digger {
         .align_y(Alignment::Center)
         .spacing(12);
 
-        let display_section = collapsible_section(
+        let display_section = self.section(
             SettingsSection::Display,
             t.display,
             t.display_desc,
-            self.collapsed_sections.contains(&SettingsSection::Display),
             column![
                 process_limit_row,
                 Space::new().height(12),
@@ -1569,8 +1604,6 @@ impl Digger {
                 retention_row,
             ]
             .into(),
-            p,
-            self.ui_mono,
         );
 
         let db_status = if self.history.is_available() {
@@ -1614,14 +1647,11 @@ impl Digger {
             );
         }
 
-        let data_section = collapsible_section(
+        let data_section = self.section(
             SettingsSection::Data,
             t.data,
             "",
-            self.collapsed_sections.contains(&SettingsSection::Data),
             Column::with_children(data_items).spacing(0).into(),
-            p,
-            self.ui_mono,
         );
 
         // Alert thresholds section
@@ -1642,11 +1672,10 @@ impl Digger {
             self.ui_mono,
         );
 
-        let alerts_section = collapsible_section(
+        let alerts_section = self.section(
             SettingsSection::Alerts,
             t.alerts,
             t.alerts_desc,
-            self.collapsed_sections.contains(&SettingsSection::Alerts),
             column![
                 row![
                     column![
@@ -1685,8 +1714,6 @@ impl Digger {
                 .spacing(12),
             ]
             .into(),
-            p,
-            self.ui_mono,
         );
 
         column![
@@ -1706,249 +1733,58 @@ impl Digger {
 
     fn view_settings_appearance(&self) -> Element<'_, Message> {
         let p = &self.pal;
-        let text_c = p.text;
-        let label_c = p.label;
-        let accent = p.accent;
-        let panel_bg = p.panel_bg;
-        let border_c = p.border;
         let t = self.t();
 
         let title = column![
-            text(t.appearance).size(16).font(self.ui_mono).color(text_c),
-            text(t.appearance_desc)
-                .size(11)
+            text(t.appearance)
+                .size(self.typo.sz(16))
                 .font(self.ui_mono)
-                .color(label_c),
+                .color(p.text),
+            text(t.appearance_desc)
+                .size(self.typo.sz(11))
+                .font(self.ui_mono)
+                .color(p.label),
         ]
         .spacing(4);
 
-        // Build theme grid grouped by family (using cached palettes)
-        let families: &[(&str, &[ThemeVariant])] = &[
-            (
-                "Catppuccin",
-                &[
-                    ThemeVariant::CatppuccinLatte,
-                    ThemeVariant::CatppuccinFrappe,
-                    ThemeVariant::CatppuccinMacchiato,
-                    ThemeVariant::CatppuccinMocha,
-                ],
-            ),
-            (
-                "Gruvbox",
-                &[ThemeVariant::GruvboxLight, ThemeVariant::GruvboxDark],
-            ),
-            (
-                "Everblush",
-                &[ThemeVariant::EverblushLight, ThemeVariant::EverblushDark],
-            ),
-            (
-                "Kanagawa",
-                &[
-                    ThemeVariant::KanagawaLight,
-                    ThemeVariant::KanagawaDark,
-                    ThemeVariant::KanagawaDragon,
-                ],
-            ),
-        ];
-
-        let mut theme_items: Vec<Element<Message>> = Vec::new();
-        for (family_name, variants) in families {
-            theme_items.push(text(*family_name).size(13).color(text_c).into());
-            theme_items.push(Space::new().height(2).into());
-            let mut variant_btns: Vec<Element<Message>> = Vec::new();
-            for &variant in *variants {
-                let is_active = self.theme_variant == variant;
-                // Use cached palette instead of rebuilding every frame
-                let pv = self
-                    .cached_theme_previews
-                    .iter()
-                    .find(|(v, _)| *v == variant)
-                    .map(|(_, p)| p.clone())
-                    .unwrap_or_else(|| build_palette(variant, self.accent_color));
-                let pv_bg = pv.bg;
-                let pv_panel = pv.panel_bg;
-                let pv_text = pv.text;
-                let pv_label = pv.label;
-                let pv_accent = pv.accent;
-                let pv_green = pv.green;
-                let pv_red = pv.red;
-                let pv_yellow = pv.yellow;
-                let btn_border = if is_active { accent } else { border_c };
-                let btn_width = if is_active { 2.5 } else { 1.0 };
-
-                // Color swatch dots showing the palette
-                let swatches = row![
-                    text(ICON_BULLET).size(10).color(pv_accent),
-                    text(ICON_BULLET).size(10).color(pv_green),
-                    text(ICON_BULLET).size(10).color(pv_red),
-                    text(ICON_BULLET).size(10).color(pv_yellow),
-                ]
-                .spacing(1);
-
-                let card = container(
-                    column![
-                        // Top: panel bg strip
-                        container(Space::new().width(Length::Fill).height(6))
-                            .width(Length::Fill)
-                            .style(move |_: &Theme| container::Style {
-                                background: Some(Background::Color(pv_panel)),
-                                ..Default::default()
-                            }),
-                        // Body
-                        container(
-                            column![text(variant.name()).size(11).color(pv_text), swatches,]
-                                .spacing(4)
-                                .align_x(Alignment::Center)
-                        )
-                        .center_x(Length::Fill)
-                        .padding([6, 8]),
-                    ]
-                    .spacing(0),
-                )
-                .width(100)
-                .style(move |_: &Theme| container::Style {
-                    background: Some(Background::Color(pv_bg)),
-                    border: Border {
-                        color: pv_label,
-                        width: 0.0,
-                        radius: 6.0.into(),
-                    },
-                    ..Default::default()
-                });
-
-                let btn = button(card)
-                    .on_press(Message::SetTheme(variant))
-                    .padding(0)
-                    .style(move |_: &Theme, _status| button::Style {
-                        background: Some(Background::Color(pv_bg)),
-                        text_color: pv_text,
-                        border: Border {
-                            color: btn_border,
-                            width: btn_width,
-                            radius: 6.0.into(),
-                        },
-                        ..Default::default()
-                    });
-                variant_btns.push(btn.into());
-            }
-            theme_items.push(Row::with_children(variant_btns).spacing(8).into());
-            theme_items.push(Space::new().height(10).into());
-        }
-
-        let theme_section = collapsible_section(
+        // The picker renders every family colony-ui ships — fifty-nine variants
+        // where Digger used to hardcode eleven — and draws each card from the
+        // catalog's own swatch. Adding a family upstream shows up here on the
+        // next `cargo update`, with nothing to change in Digger.
+        let theme_section = self.section(
             SettingsSection::Theme,
             t.theme,
             t.theme_desc,
-            self.collapsed_sections.contains(&SettingsSection::Theme),
-            Column::with_children(theme_items).spacing(4).into(),
-            p,
-            self.ui_mono,
+            colony_ui::widgets::theme_picker(
+                &self.typo,
+                &self.theme_variant.family,
+                &self.theme_variant.variant,
+                |family, variant| Message::SetTheme {
+                    family: family.to_string(),
+                    variant: variant.to_string(),
+                },
+            ),
         );
 
-        // Accent color selector
-        let mut accent_btns: Vec<Element<Message>> = Vec::new();
-        for &ac in AccentColor::ALL {
-            let is_active = self.accent_color == ac;
-            let ac_color = ac.color();
-            let check_color = text_c;
-            let btn_border = if is_active {
-                text_c
-            } else {
-                Color::TRANSPARENT
-            };
-
-            let label_el: Element<Message> = if is_active {
-                text(ICON_CHECK).size(12).color(check_color).into()
-            } else {
-                Space::new().into()
-            };
-
-            let btn = button(
-                container(label_el)
-                    .center_x(Length::Fill)
-                    .center_y(Length::Fill)
-                    .width(32)
-                    .height(32)
-                    .style(move |_: &Theme| container::Style {
-                        background: Some(Background::Color(ac_color)),
-                        border: Border {
-                            color: Color::TRANSPARENT,
-                            width: 0.0,
-                            radius: 16.0.into(),
-                        },
-                        ..Default::default()
-                    }),
-            )
-            .on_press(Message::SetAccent(ac))
-            .padding(0)
-            .style(move |_: &Theme, _status| button::Style {
-                background: Some(Background::Color(ac_color)),
-                text_color: check_color,
-                border: Border {
-                    color: btn_border,
-                    width: if is_active { 2.0 } else { 0.0 },
-                    radius: 16.0.into(),
-                },
-                ..Default::default()
-            });
-            accent_btns.push(
-                column![btn, text(ac.name()).size(9).color(label_c),]
-                    .align_x(Alignment::Center)
-                    .spacing(2)
-                    .into(),
-            );
-        }
-
-        let accent_section = collapsible_section(
+        // Clicking the selected accent clears it. Without that there is no way
+        // back to "follow the theme" once an override has been set, and the
+        // override is not a colour the user can otherwise reproduce.
+        let selected_accent = self.accent_color.key().map(str::to_string);
+        let accent_section = self.section(
             SettingsSection::Accent,
             t.accent_color,
             t.accent_color_desc,
-            self.collapsed_sections.contains(&SettingsSection::Accent),
-            Row::with_children(accent_btns).spacing(8).into(),
-            p,
-            self.ui_mono,
+            colony_ui::widgets::accent_picker(&self.typo, self.accent_color.key(), move |key| {
+                Message::SetAccent(if selected_accent.as_deref() == Some(key) {
+                    None
+                } else {
+                    Some(key.to_string())
+                })
+            }),
         );
-
-        // Current theme info
-        let current_info = container(row![
-            text(format!(
-                "{ICON_CHECK} {}  {}",
-                self.theme_variant.family(),
-                self.theme_variant.name()
-            ))
-            .size(11)
-            .font(self.ui_mono)
-            .color(accent),
-            Space::new().width(12),
-            text(format!(
-                "{ICON_BULLET} Accent: {}",
-                self.accent_color.name()
-            ))
-            .size(11)
-            .font(self.ui_mono)
-            .color(self.accent_color.color()),
-        ])
-        .padding([8, 12])
-        .width(Length::Fill)
-        .style(move |_: &Theme| container::Style {
-            background: Some(Background::Color(panel_bg)),
-            border: Border {
-                color: border_c,
-                width: 1.0,
-                radius: 8.0.into(),
-            },
-            shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.08),
-                offset: Vector::new(0.0, 1.0),
-                blur_radius: 4.0,
-            },
-            ..Default::default()
-        });
 
         column![
             title,
-            Space::new().height(8),
-            current_info,
             Space::new().height(12),
             theme_section,
             Space::new().height(6),
@@ -1956,6 +1792,34 @@ impl Digger {
         ]
         .spacing(4)
         .into()
+    }
+
+    /// One collapsible settings section, in the shared shape: a flat header row
+    /// carrying the title and a chevron, and the description as the first line
+    /// of the body rather than a second line in the header — a closed category
+    /// should read as a short list of titles.
+    fn section<'a>(
+        &'a self,
+        id: SettingsSection,
+        title: &'a str,
+        description: &'a str,
+        content: Element<'a, Message>,
+    ) -> Element<'a, Message> {
+        let body = column![
+            text(description)
+                .size(self.typo.sz(11))
+                .font(self.ui_mono)
+                .color(self.pal.label),
+            Space::new().height(8),
+            content,
+        ];
+        colony_ui::widgets::collapsible_section(
+            &self.typo,
+            title,
+            !self.collapsed_sections.contains(&id),
+            Message::ToggleSection(id),
+            body.into(),
+        )
     }
 
     fn view_settings_accessibility(&self) -> Element<'_, Message> {
@@ -2000,11 +1864,10 @@ impl Digger {
             t.disabled
         };
 
-        let font_section = collapsible_section(
+        let font_section = self.section(
             SettingsSection::Fonts,
             t.fonts,
             t.fonts_desc,
-            self.collapsed_sections.contains(&SettingsSection::Fonts),
             column![row![
                 column![
                     text(t.dyslexic_font)
@@ -2026,8 +1889,6 @@ impl Digger {
             .align_y(Alignment::Center)
             .spacing(12),]
             .into(),
-            p,
-            self.ui_mono,
         );
 
         column![title, Space::new().height(16), font_section,]
@@ -2205,11 +2066,10 @@ impl Digger {
         ]
         .spacing(4);
 
-        let version_section = collapsible_section(
+        let version_section = self.section(
             SettingsSection::Version,
             t.version,
             "",
-            self.collapsed_sections.contains(&SettingsSection::Version),
             column![
                 info_row(t.application, "Digger", p, self.ui_mono),
                 info_row(t.version, "0.1.0", p, self.ui_mono),
@@ -2218,15 +2078,12 @@ impl Digger {
             ]
             .spacing(6)
             .into(),
-            p,
-            self.ui_mono,
         );
 
-        let font_section = collapsible_section(
+        let font_section = self.section(
             SettingsSection::FontInfo,
             t.fonts,
             "",
-            self.collapsed_sections.contains(&SettingsSection::FontInfo),
             column![
                 info_row(t.ui_font, "Iosevka Nerd Font Propo", p, self.ui_mono),
                 info_row(t.mono_font, "Iosevka Nerd Font Mono", p, self.ui_mono),
@@ -2235,8 +2092,6 @@ impl Digger {
             ]
             .spacing(6)
             .into(),
-            p,
-            self.ui_mono,
         );
 
         // System info section
@@ -2263,15 +2118,11 @@ impl Digger {
                 .color(label_c),]
         };
 
-        let system_section = collapsible_section(
+        let system_section = self.section(
             SettingsSection::SystemInfo,
             t.system_information,
             "",
-            self.collapsed_sections
-                .contains(&SettingsSection::SystemInfo),
             sys_items.into(),
-            p,
-            self.ui_mono,
         );
 
         column![
@@ -3908,93 +3759,6 @@ fn settings_sidebar_item(
         }
     })
     .into()
-}
-
-fn collapsible_section<'a>(
-    section: SettingsSection,
-    title: impl ToString,
-    description: impl ToString,
-    collapsed: bool,
-    content: Element<'a, Message>,
-    p: &Palette,
-    mono_font: iced::Font,
-) -> Element<'a, Message> {
-    let title_str = title.to_string();
-    let desc_str = description.to_string();
-    let chevron = if collapsed {
-        ICON_CHEVRON_RIGHT
-    } else {
-        ICON_CHEVRON_DOWN
-    };
-    let text_c = p.text;
-    let label_c = p.label;
-    let panel_bg = p.panel_bg;
-    let border_c = p.border;
-
-    let hover_bg = Color::from_rgb(
-        (panel_bg.r + 0.02).min(1.0),
-        (panel_bg.g + 0.02).min(1.0),
-        (panel_bg.b + 0.02).min(1.0),
-    );
-    let header = button(
-        row![
-            text(title_str).size(13).font(mono_font).color(text_c),
-            Space::new().width(Length::Fill),
-            text(chevron).size(12).color(label_c),
-        ]
-        .align_y(Alignment::Center),
-    )
-    .on_press(Message::ToggleSection(section))
-    .width(Length::Fill)
-    .padding([10, 14])
-    .style(move |_: &Theme, status| {
-        let bg_final = match status {
-            button::Status::Hovered => hover_bg,
-            _ => panel_bg,
-        };
-        button::Style {
-            background: Some(Background::Color(bg_final)),
-            text_color: text_c,
-            border: Border {
-                color: border_c,
-                width: 1.0,
-                radius: 8.0.into(),
-            },
-            shadow: Shadow {
-                color: Color::from_rgba(0.0, 0.0, 0.0, 0.08),
-                offset: Vector::new(0.0, 1.0),
-                blur_radius: 3.0,
-            },
-
-            ..Default::default()
-        }
-    });
-
-    if collapsed {
-        return header.into();
-    }
-
-    let mut body_items: Vec<Element<Message>> = Vec::new();
-    if !desc_str.is_empty() {
-        body_items.push(text(desc_str).size(10).color(label_c).into());
-        body_items.push(Space::new().height(10).into());
-    }
-    body_items.push(content);
-
-    let body = container(Column::with_children(body_items).spacing(0))
-        .padding([10, 14])
-        .width(Length::Fill)
-        .style(move |_: &Theme| container::Style {
-            background: Some(Background::Color(panel_bg)),
-            border: Border {
-                color: border_c,
-                width: 1.0,
-                radius: 8.0.into(),
-            },
-            ..Default::default()
-        });
-
-    column![header, body].spacing(0).into()
 }
 
 fn info_row<'a>(

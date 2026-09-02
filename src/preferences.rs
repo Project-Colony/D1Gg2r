@@ -3,12 +3,17 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::i18n::Language;
-use crate::theme::{AccentColor, ThemeVariant};
+use crate::theme::{AccentChoice, ThemeChoice};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Preferences {
-    pub theme: ThemeVariant,
-    pub accent: AccentColor,
+    /// The theme, as catalog keys. Reads the eleven enum names older files
+    /// hold — see `ThemeChoice`'s Deserialize.
+    #[serde(default)]
+    pub theme: ThemeChoice,
+    /// The accent override, or "follow the theme" when unset.
+    #[serde(default)]
+    pub accent: AccentChoice,
     pub refresh_interval_secs: u64,
     pub temp_celsius: bool,
     /// Maximum number of processes displayed in the process list.
@@ -70,8 +75,8 @@ fn default_process_sort() -> String {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
-            theme: ThemeVariant::CatppuccinMocha,
-            accent: AccentColor::Blue,
+            theme: ThemeChoice::default(),
+            accent: AccentChoice::default(),
             refresh_interval_secs: 1,
             temp_celsius: true,
             process_limit: default_process_limit(),

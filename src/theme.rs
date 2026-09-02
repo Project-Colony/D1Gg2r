@@ -1,167 +1,223 @@
+//! Digger's colours, derived from the shared Colony catalog.
+//!
+//! Digger used to carry eleven themes of its own. It now names a theme the way
+//! every Colony program does — a family key and a variant key resolved through
+//! `colony-ui` — which is what lets one catalog serve the whole ecosystem and
+//! what gave Digger fifty-nine themes instead of eleven.
+
 use iced::Color;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
-// ─── ACCENT COLORS ──────────────────────────────────────────────
+// ─── THE USER'S CHOICE ──────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AccentColor {
-    Red,
-    Orange,
-    Yellow,
-    Green,
-    Blue,
-    Indigo,
-    Violet,
-    Amber,
+/// A theme, named by the catalog's own keys.
+///
+/// Stored rather than an enum because the catalog grows: a family added to
+/// Project-Colony-Resources shows up here on the next `cargo update`, with no
+/// enum to extend and no match arm to forget.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ThemeChoice {
+    pub family: String,
+    pub variant: String,
 }
 
-impl AccentColor {
-    pub const ALL: &[AccentColor] = &[
-        AccentColor::Red,
-        AccentColor::Orange,
-        AccentColor::Yellow,
-        AccentColor::Green,
-        AccentColor::Blue,
-        AccentColor::Indigo,
-        AccentColor::Violet,
-        AccentColor::Amber,
-    ];
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            AccentColor::Red => "Red",
-            AccentColor::Orange => "Orange",
-            AccentColor::Yellow => "Yellow",
-            AccentColor::Green => "Green",
-            AccentColor::Blue => "Blue",
-            AccentColor::Indigo => "Indigo",
-            AccentColor::Violet => "Violet",
-            AccentColor::Amber => "Amber",
-        }
-    }
-
-    pub fn color(&self) -> Color {
-        match self {
-            AccentColor::Red => Color::from_rgb(0.93, 0.30, 0.35),
-            AccentColor::Orange => Color::from_rgb(0.96, 0.52, 0.20),
-            AccentColor::Yellow => Color::from_rgb(0.95, 0.80, 0.25),
-            AccentColor::Green => Color::from_rgb(0.35, 0.87, 0.40),
-            AccentColor::Blue => Color::from_rgb(0.33, 0.63, 0.95),
-            AccentColor::Indigo => Color::from_rgb(0.40, 0.35, 0.90),
-            AccentColor::Violet => Color::from_rgb(0.65, 0.45, 0.85),
-            AccentColor::Amber => Color::from_rgb(1.0, 0.75, 0.03),
+impl Default for ThemeChoice {
+    fn default() -> Self {
+        Self {
+            family: "catppuccin".into(),
+            variant: "mocha".into(),
         }
     }
 }
 
-// ─── THEME VARIANTS ─────────────────────────────────────────────
+impl ThemeChoice {
+    pub fn new(family: &str, variant: &str) -> Self {
+        Self {
+            family: family.to_string(),
+            variant: variant.to_string(),
+        }
+    }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThemeVariant {
-    // Catppuccin
-    CatppuccinLatte,
-    CatppuccinFrappe,
-    CatppuccinMacchiato,
-    CatppuccinMocha,
-    // Gruvbox
-    GruvboxLight,
-    GruvboxDark,
-    // Everblush
-    EverblushLight,
-    EverblushDark,
-    // Kanagawa
-    KanagawaLight,
-    KanagawaDark,
-    KanagawaDragon,
-}
+    pub fn is(&self, family: &str, variant: &str) -> bool {
+        self.family == family && self.variant == variant
+    }
 
-impl ThemeVariant {
-    pub const ALL: &[ThemeVariant] = &[
-        ThemeVariant::CatppuccinLatte,
-        ThemeVariant::CatppuccinFrappe,
-        ThemeVariant::CatppuccinMacchiato,
-        ThemeVariant::CatppuccinMocha,
-        ThemeVariant::GruvboxLight,
-        ThemeVariant::GruvboxDark,
-        ThemeVariant::EverblushLight,
-        ThemeVariant::EverblushDark,
-        ThemeVariant::KanagawaLight,
-        ThemeVariant::KanagawaDark,
-        ThemeVariant::KanagawaDragon,
-    ];
-
-    /// The catalog keys this variant names in colony-ui.
+    /// The catalog entry, or `None` for a theme this build has never heard of.
     ///
-    /// Digger's eleven themes are four of the shared families, and the palettes
-    /// were copies of the shared ones. This is the whole of the mapping.
-    pub fn keys(&self) -> (&'static str, &'static str) {
-        match self {
-            ThemeVariant::CatppuccinLatte => ("catppuccin", "latte"),
-            ThemeVariant::CatppuccinFrappe => ("catppuccin", "frappe"),
-            ThemeVariant::CatppuccinMacchiato => ("catppuccin", "macchiato"),
-            ThemeVariant::CatppuccinMocha => ("catppuccin", "mocha"),
-            ThemeVariant::GruvboxLight => ("gruvbox", "light"),
-            ThemeVariant::GruvboxDark => ("gruvbox", "dark"),
-            ThemeVariant::EverblushLight => ("everblush", "light"),
-            ThemeVariant::EverblushDark => ("everblush", "dark"),
-            ThemeVariant::KanagawaLight => ("kanagawa", "light"),
-            ThemeVariant::KanagawaDark => ("kanagawa", "dark"),
-            ThemeVariant::KanagawaDragon => ("kanagawa", "dragon"),
-        }
-    }
-
-    pub fn family_key(&self) -> &'static str {
-        self.keys().0
-    }
-
-    pub fn variant_key(&self) -> &'static str {
-        self.keys().1
-    }
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            ThemeVariant::CatppuccinLatte => "Latte",
-            ThemeVariant::CatppuccinFrappe => "Frappé",
-            ThemeVariant::CatppuccinMacchiato => "Macchiato",
-            ThemeVariant::CatppuccinMocha => "Mocha",
-            ThemeVariant::GruvboxLight => "Light",
-            ThemeVariant::GruvboxDark => "Dark",
-            ThemeVariant::EverblushLight => "Light",
-            ThemeVariant::EverblushDark => "Dark",
-            ThemeVariant::KanagawaLight => "Lotus",
-            ThemeVariant::KanagawaDark => "Wave",
-            ThemeVariant::KanagawaDragon => "Dragon",
-        }
-    }
-
-    pub fn family(&self) -> &'static str {
-        match self {
-            ThemeVariant::CatppuccinLatte
-            | ThemeVariant::CatppuccinFrappe
-            | ThemeVariant::CatppuccinMacchiato
-            | ThemeVariant::CatppuccinMocha => "Catppuccin",
-            ThemeVariant::GruvboxLight | ThemeVariant::GruvboxDark => "Gruvbox",
-            ThemeVariant::EverblushLight | ThemeVariant::EverblushDark => "Everblush",
-            ThemeVariant::KanagawaLight
-            | ThemeVariant::KanagawaDark
-            | ThemeVariant::KanagawaDragon => "Kanagawa",
-        }
+    /// Distinct from `resolve`, which silently falls back: a config naming a
+    /// removed theme should still *render*, but a caller asking "is this light?"
+    /// deserves to know the answer is a guess.
+    pub fn entry(&self) -> Option<&'static colony_ui::ThemeVariantMeta> {
+        colony_ui::THEME_FAMILIES
+            .iter()
+            .find(|f| f.key == self.family)?
+            .variants
+            .iter()
+            .find(|v| v.key == self.variant)
     }
 
     pub fn is_light(&self) -> bool {
-        matches!(
-            self,
-            ThemeVariant::CatppuccinLatte
-                | ThemeVariant::GruvboxLight
-                | ThemeVariant::EverblushLight
-                | ThemeVariant::KanagawaLight
-        )
+        self.entry().map(|v| v.mode == "light").unwrap_or(false)
+    }
+
+    /// The eleven names Digger persisted before it used the shared catalog.
+    ///
+    /// `KanagawaDragon` is the one that is not a rename: Colony's
+    /// `kanagawa/journal` holds the const name `KANAGAWA_DRAGON` while being a
+    /// light parchment theme, so the upstream Dragon is `kanagawa/dragon`.
+    fn from_legacy(name: &str) -> Self {
+        let (family, variant) = match name {
+            "CatppuccinLatte" => ("catppuccin", "latte"),
+            "CatppuccinFrappe" => ("catppuccin", "frappe"),
+            "CatppuccinMacchiato" => ("catppuccin", "macchiato"),
+            "CatppuccinMocha" => ("catppuccin", "mocha"),
+            "GruvboxLight" => ("gruvbox", "light"),
+            "GruvboxDark" => ("gruvbox", "dark"),
+            "EverblushLight" => ("everblush", "light"),
+            "EverblushDark" => ("everblush", "dark"),
+            "KanagawaLight" => ("kanagawa", "light"),
+            "KanagawaDark" => ("kanagawa", "dark"),
+            "KanagawaDragon" => ("kanagawa", "dragon"),
+            // Not a theme this build knows. Falling back to the default is the
+            // only option that still starts, and the picker will show what the
+            // user actually has selected rather than a phantom.
+            _ => return Self::default(),
+        };
+        Self::new(family, variant)
+    }
+}
+
+/// Accepts both shapes: `{"family":"gruvbox","variant":"dark"}` as written
+/// today, and the bare `"GruvboxDark"` that older preferences files hold.
+impl<'de> Deserialize<'de> for ThemeChoice {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Stored {
+            Keys { family: String, variant: String },
+            Legacy(String),
+        }
+        Ok(match Stored::deserialize(d)? {
+            Stored::Keys { family, variant } => Self { family, variant },
+            Stored::Legacy(name) => Self::from_legacy(&name),
+        })
+    }
+}
+
+/// The accent override. `None` means "follow the theme".
+///
+/// Never a colour value: an unset override resolves to the active palette's own
+/// `accent_blue`, which is a different thing from the user having picked blue.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct AccentChoice(pub Option<String>);
+
+impl AccentChoice {
+    pub fn key(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+
+    pub fn is(&self, key: &str) -> bool {
+        self.0.as_deref() == Some(key)
+    }
+}
+
+/// Older preferences stored the capitalised enum name, `"Blue"`. The catalog
+/// keys are the same eight words in lowercase, so one `to_lowercase` reads both
+/// — and anything that is not one of the eight becomes "follow the theme"
+/// rather than a hard error on a file the user cannot edit.
+impl<'de> Deserialize<'de> for AccentChoice {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let stored = Option::<String>::deserialize(d)?;
+        Ok(Self(stored.map(|s| s.to_lowercase()).filter(|key| {
+            colony_ui::ACCENT_OVERRIDES.iter().any(|a| a.key == *key)
+        })))
+    }
+}
+
+// ─── PALETTE ────────────────────────────────────────────────────
+
+/// All semantic colors the app uses, derived from theme + accent.
+#[derive(Debug, Clone, Copy)]
+pub struct Palette {
+    pub bg: Color,
+    pub panel_bg: Color,
+    pub sidebar_bg: Color,
+    pub border: Color,
+    pub grid: Color,
+    pub label: Color,
+    pub text: Color,
+    pub bar_bg: Color,
+    // Semantic
+    pub accent: Color,
+    pub green: Color,
+    pub red: Color,
+    pub yellow: Color,
+    pub cyan: Color,
+    pub magenta: Color,
+    pub blue: Color,
+}
+
+pub fn build_palette(theme: &ThemeChoice, accent: &AccentChoice) -> Palette {
+    let base = base_palette(theme);
+    let chosen = accent
+        .key()
+        .and_then(colony_ui::accent_key_to_color)
+        .unwrap_or(base.accent);
+    Palette {
+        // The accent is a chart line like any other, and the user can pick a
+        // pale one on a pale theme.
+        accent: readable_on(chosen, base.bg, base.panel_bg),
+        ..base
+    }
+}
+
+/// Derive Digger's fifteen roles from the shared thirty-eight.
+///
+/// Twelve map onto a shared role that means the same thing. Three do not:
+/// `cyan`, `magenta` and `blue` are *series* colours — they identify one line on
+/// a chart against another — and the shared palette has no such vocabulary. They
+/// come from the shared accent overrides instead, which are fixed hues chosen to
+/// be distinguishable from each other. That makes a series keep its identity
+/// across themes, and it is the reason they are not simply mapped onto
+/// accent_icon and accent_progress: on most themes those two are the same
+/// colour, which would have quietly turned two chart lines into one.
+pub fn base_palette(theme: &ThemeChoice) -> Palette {
+    let p = colony_ui::resolve(&theme.family, &theme.variant);
+    let series = |key: &str| colony_ui::accent_key_to_color(key).unwrap_or(p.accent_blue);
+    let legible = |c: Color| readable_on(c, p.bg_primary, p.bg_card);
+    Palette {
+        bg: p.bg_primary,
+        panel_bg: p.bg_card,
+        sidebar_bg: p.bg_sidebar,
+        border: p.border_subtle,
+        // A hairline over the chart area rather than a palette entry: it has to
+        // read against whatever the theme's background is, so it is the ink at
+        // low alpha rather than a colour of its own.
+        grid: Color {
+            a: 0.06,
+            ..p.text_primary
+        },
+        label: p.text_muted,
+        text: p.text_primary,
+        bar_bg: p.bg_progress,
+        // Replaced by build_palette with the user's chosen accent.
+        accent: p.accent_blue,
+        green: legible(p.success),
+        red: legible(p.error),
+        yellow: legible(p.warning),
+        cyan: legible(series("blue")),
+        magenta: legible(series("violet")),
+        blue: legible(series("indigo")),
     }
 }
 
 // ─── LEGIBILITY ─────────────────────────────────────────────────
 
 /// WCAG relative luminance.
+///
+/// Not `colony_ui::ColorExt::luma`, which is the cheaper YIQ approximation and
+/// the right tool for "is this surface light?". Deciding whether a thin line is
+/// *visible* needs the real curve.
 fn luminance(c: Color) -> f32 {
     fn channel(v: f32) -> f32 {
         if v <= 0.03928 {
@@ -219,167 +275,56 @@ fn readable_on(color: Color, bg: Color, panel: Color) -> Color {
     best
 }
 
-// ─── PALETTE ────────────────────────────────────────────────────
-
-/// All semantic colors the app uses, derived from theme + accent.
-#[derive(Debug, Clone, Copy)]
-pub struct Palette {
-    pub bg: Color,
-    pub panel_bg: Color,
-    pub sidebar_bg: Color,
-    pub border: Color,
-    pub grid: Color,
-    pub label: Color,
-    pub text: Color,
-    pub bar_bg: Color,
-    // Semantic
-    pub accent: Color,
-    pub green: Color,
-    pub red: Color,
-    pub yellow: Color,
-    pub cyan: Color,
-    pub magenta: Color,
-    pub blue: Color,
-}
-
-pub fn build_palette(theme: ThemeVariant, accent: AccentColor) -> Palette {
-    let base = base_palette(theme);
-    Palette {
-        // The accent is a chart line like any other, and the user can pick a
-        // pale one on a pale theme.
-        accent: readable_on(accent.color(), base.bg, base.panel_bg),
-        ..base
-    }
-}
-
-/// Derive Digger's fifteen roles from the shared thirty-eight.
-///
-/// Twelve map onto a shared role that means the same thing. Three do not:
-/// `cyan`, `magenta` and `blue` are *series* colours — they identify one line on
-/// a chart against another — and the shared palette has no such vocabulary. They
-/// come from the shared accent overrides instead, which are fixed hues chosen to
-/// be distinguishable from each other. That makes a series keep its identity
-/// across themes, and it is the reason they are not simply mapped onto
-/// accent_icon and accent_progress: on most themes those two are the same
-/// colour, which would have quietly turned two chart lines into one.
-fn base_palette(theme: ThemeVariant) -> Palette {
-    let p = colony_ui::resolve(theme.family_key(), theme.variant_key());
-    let series = |key: &str| colony_ui::accent_key_to_color(key).unwrap_or(p.accent_blue);
-    let legible = |c: Color| readable_on(c, p.bg_primary, p.bg_card);
-    Palette {
-        bg: p.bg_primary,
-        panel_bg: p.bg_card,
-        sidebar_bg: p.bg_sidebar,
-        border: p.border_subtle,
-        // A hairline over the chart area rather than a palette entry: it has to
-        // read against whatever the theme's background is, so it is the ink at
-        // low alpha rather than a colour of its own.
-        grid: Color {
-            a: 0.06,
-            ..p.text_primary
-        },
-        label: p.text_muted,
-        text: p.text_primary,
-        bar_bg: p.bg_progress,
-        // Replaced by build_palette with the user's chosen accent.
-        accent: p.accent_blue,
-        green: legible(p.success),
-        red: legible(p.error),
-        yellow: legible(p.warning),
-        cyan: legible(series("blue")),
-        magenta: legible(series("violet")),
-        blue: legible(series("indigo")),
-    }
-}
-
 #[cfg(test)]
-mod shared_palette_tests {
+mod tests {
     use super::*;
 
-    /// colony_ui::resolve falls back to Gruvbox Dark for a pair it does not
-    /// recognise, so a wrong mapping would not fail — every theme would quietly
-    /// become Gruvbox Dark. Check each against the catalog instead.
+    /// Every theme the picker can offer has to produce a usable palette — the
+    /// picker renders the whole catalog now, not a list Digger curated.
+    fn all_themes() -> impl Iterator<Item = ThemeChoice> {
+        colony_ui::THEME_FAMILIES
+            .iter()
+            .flat_map(|f| f.variants.iter().map(|v| ThemeChoice::new(f.key, v.key)))
+    }
+
     #[test]
-    fn every_variant_names_a_real_catalog_entry() {
-        for variant in ThemeVariant::ALL {
-            let (family, name) = variant.keys();
-            let found = colony_ui::THEME_FAMILIES
-                .iter()
-                .find(|f| f.key == family)
-                .and_then(|f| f.variant(name));
+    fn the_catalog_is_not_empty_and_holds_what_digger_used_to_ship() {
+        let all: Vec<_> = all_themes().collect();
+        assert!(
+            all.len() >= 59,
+            "the catalog shrank: {} variants",
+            all.len()
+        );
+        for (family, variant) in [
+            ("catppuccin", "mocha"),
+            ("gruvbox", "dark"),
+            ("everblush", "dark"),
+            ("kanagawa", "dragon"),
+        ] {
             assert!(
-                found.is_some(),
-                "{variant:?} maps to ({family}, {name}), absent from the catalog"
+                all.iter().any(|t| t.is(family, variant)),
+                "{family}/{variant} is gone"
             );
         }
     }
 
-    #[test]
-    fn distinct_variants_stay_distinct() {
-        let mut seen = std::collections::BTreeSet::new();
-        for variant in ThemeVariant::ALL {
-            assert!(
-                seen.insert(variant.keys()),
-                "{variant:?} duplicates another"
-            );
-        }
-    }
-
-    /// is_light() is Digger's own list; the catalog records the same fact.
-    /// They must agree, or a light theme gets dark-theme treatment somewhere.
-    #[test]
-    fn the_light_dark_split_agrees_with_the_catalog() {
-        for variant in ThemeVariant::ALL {
-            let (family, name) = variant.keys();
-            let mode = colony_ui::THEME_FAMILIES
-                .iter()
-                .find(|f| f.key == family)
-                .and_then(|f| f.variant(name))
-                .map(|v| v.mode)
-                .expect("catalog entry");
-            assert_eq!(
-                variant.is_light(),
-                mode == "light",
-                "{variant:?}: Digger says light={}, the catalog says {mode}",
-                variant.is_light()
-            );
-        }
-    }
-
-    /// Two chart lines sharing a colour is the bug this mapping exists to
-    /// avoid — accent_icon and accent_progress are the same colour on most
-    /// themes, which is why the series colours do not come from them.
-    #[test]
-    fn the_three_series_colours_are_distinct_on_every_theme() {
-        for variant in ThemeVariant::ALL {
-            let p = base_palette(*variant);
-            let series = [p.cyan, p.magenta, p.blue];
-            for (i, a) in series.iter().enumerate() {
-                for b in series.iter().skip(i + 1) {
-                    assert_ne!(a, b, "{variant:?}: two chart series share a colour");
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn catppuccin_latte_still_has_its_own_colours() {
-        let p = base_palette(ThemeVariant::CatppuccinLatte);
-        assert_eq!(p.bg, colony_ui::hex(0xeff1f5));
-        assert_eq!(p.text, colony_ui::hex(0x4c4f69));
-        assert_eq!(p.label, colony_ui::hex(0x6c6f85));
-    }
-
-    /// The regression this whole helper exists for. Before it, `warning` on
+    /// The regression the legibility helper exists for. Before it, `warning` on
     /// Kanagawa journal was 1.65:1 — a yellow sparkline on parchment. Every
     /// series has to clear the floor on both surfaces it is drawn on, for every
     /// theme and every accent the user can pick.
     #[test]
     fn every_series_colour_is_visible_on_every_theme_and_accent() {
+        let accents = std::iter::once(AccentChoice(None)).chain(
+            colony_ui::ACCENT_OVERRIDES
+                .iter()
+                .map(|a| AccentChoice(Some(a.key.to_string()))),
+        );
+        let accents: Vec<_> = accents.collect();
+
         let mut failures = Vec::new();
-        for variant in ThemeVariant::ALL {
-            for accent in AccentColor::ALL {
-                let p = build_palette(*variant, *accent);
+        for theme in all_themes() {
+            for accent in &accents {
+                let p = build_palette(&theme, accent);
                 let roles = [
                     ("accent", p.accent),
                     ("green", p.green),
@@ -394,7 +339,8 @@ mod shared_palette_tests {
                         let ratio = contrast(color, bg);
                         if ratio < MIN_SERIES_CONTRAST {
                             failures.push(format!(
-                                "{variant:?}/{accent:?} {name} on {surface}: {ratio:.2}:1"
+                                "{}/{} {:?} {name} on {surface}: {ratio:.2}:1",
+                                theme.family, theme.variant, accent.0
                             ));
                         }
                     }
@@ -403,13 +349,32 @@ mod shared_palette_tests {
         }
         assert!(
             failures.is_empty(),
-            "series colours below {MIN_SERIES_CONTRAST}:1:\n  {}",
+            "{} series colours below {MIN_SERIES_CONTRAST}:1:\n  {}",
+            failures.len(),
             failures.join("\n  ")
         );
     }
 
-    /// A colour that already clears the floor must come back untouched — the
-    /// dark themes were fine before and must not be repainted.
+    /// Adjusting for legibility must not collapse two chart lines into one.
+    #[test]
+    fn the_three_series_stay_distinct_on_every_theme() {
+        for theme in all_themes() {
+            let p = base_palette(&theme);
+            let series = [p.cyan, p.magenta, p.blue];
+            for (i, a) in series.iter().enumerate() {
+                for b in series.iter().skip(i + 1) {
+                    assert_ne!(
+                        a, b,
+                        "{}/{}: two chart series share a colour",
+                        theme.family, theme.variant
+                    );
+                }
+            }
+        }
+    }
+
+    /// A colour that already clears the floor comes back untouched — the dark
+    /// themes were fine before and must not be repainted.
     #[test]
     fn a_colour_that_already_passes_is_left_alone() {
         let p = colony_ui::resolve("kanagawa", "dragon");
@@ -418,5 +383,94 @@ mod shared_palette_tests {
             p.success,
             "Dragon's green passed at 6.9:1 and should not have moved"
         );
+    }
+
+    #[test]
+    fn light_and_dark_come_from_the_catalog() {
+        assert!(ThemeChoice::new("catppuccin", "latte").is_light());
+        assert!(!ThemeChoice::new("catppuccin", "mocha").is_light());
+        assert!(!ThemeChoice::new("kanagawa", "dragon").is_light());
+        assert!(
+            ThemeChoice::new("kanagawa", "journal").is_light(),
+            "journal is Colony's parchment theme, not upstream Dragon"
+        );
+    }
+
+    #[test]
+    fn a_theme_this_build_does_not_know_is_not_claimed_as_light() {
+        let unknown = ThemeChoice::new("a_theme_from_the_future", "shiny");
+        assert!(unknown.entry().is_none());
+        assert!(!unknown.is_light());
+        // It still renders: resolve falls back rather than panicking.
+        let _ = base_palette(&unknown);
+    }
+
+    // ─── persisted preferences ──────────────────────────────────
+
+    /// The eleven names older preferences files hold. Getting this wrong resets
+    /// a user's theme on upgrade, silently.
+    #[test]
+    fn legacy_theme_names_still_load() {
+        let cases = [
+            ("CatppuccinLatte", "catppuccin", "latte"),
+            ("CatppuccinMocha", "catppuccin", "mocha"),
+            ("GruvboxLight", "gruvbox", "light"),
+            ("EverblushDark", "everblush", "dark"),
+            ("KanagawaLight", "kanagawa", "light"),
+            ("KanagawaDark", "kanagawa", "dark"),
+            ("KanagawaDragon", "kanagawa", "dragon"),
+        ];
+        for (stored, family, variant) in cases {
+            let got: ThemeChoice = serde_json::from_str(&format!("\"{stored}\"")).unwrap();
+            assert!(
+                got.is(family, variant),
+                "{stored} loaded as {}/{}",
+                got.family,
+                got.variant
+            );
+        }
+    }
+
+    #[test]
+    fn the_new_theme_shape_round_trips() {
+        let choice = ThemeChoice::new("rosepine", "moon");
+        let json = serde_json::to_string(&choice).unwrap();
+        assert_eq!(serde_json::from_str::<ThemeChoice>(&json).unwrap(), choice);
+    }
+
+    #[test]
+    fn an_unreadable_theme_falls_back_rather_than_failing_to_load() {
+        let got: ThemeChoice = serde_json::from_str("\"SomeThemeWeDropped\"").unwrap();
+        assert_eq!(got, ThemeChoice::default());
+    }
+
+    #[test]
+    fn legacy_accent_names_still_load() {
+        for (stored, key) in [
+            ("\"Blue\"", "blue"),
+            ("\"Amber\"", "amber"),
+            ("\"Violet\"", "violet"),
+        ] {
+            let got: AccentChoice = serde_json::from_str(stored).unwrap();
+            assert!(got.is(key), "{stored} loaded as {:?}", got.0);
+        }
+    }
+
+    #[test]
+    fn an_unset_accent_means_follow_the_theme() {
+        let got: AccentChoice = serde_json::from_str("null").unwrap();
+        assert_eq!(got.key(), None);
+        // And it resolves to the palette's own accent, not to a stored colour.
+        let theme = ThemeChoice::new("gruvbox", "dark");
+        assert_eq!(
+            build_palette(&theme, &got).accent,
+            base_palette(&theme).accent
+        );
+    }
+
+    #[test]
+    fn an_accent_this_build_does_not_know_means_follow_the_theme() {
+        let got: AccentChoice = serde_json::from_str("\"chartreuse\"").unwrap();
+        assert_eq!(got.key(), None);
     }
 }
