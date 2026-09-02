@@ -1,7 +1,12 @@
 use rusqlite::{params, Connection};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::metrics::Snapshot;
+
+/// A WAL-mode database is three files, and the newest samples live in the log
+/// rather than the main file. Anything that copies or removes one copies or
+/// removes all three.
+const SQLITE_PARTS: [&str; 3] = ["", "-wal", "-shm"];
 
 /// Stored point for a single metric at a given time.
 #[derive(Clone, Debug)]
@@ -48,6 +53,7 @@ impl History {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
+        Self::migrate_legacy_db(&path);
 
         // Set restrictive permissions on the DB directory (Unix only)
         #[cfg(unix)]
@@ -106,11 +112,37 @@ impl History {
         }
     }
 
+    /// `<data>/Colony/Digger/history.db`.
     fn db_path() -> PathBuf {
-        dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("digger")
+        colony_ui::paths::locate::data_dir(crate::PROGRAM)
+            .unwrap_or_else(|_| PathBuf::from("."))
             .join("history.db")
+    }
+
+    /// Where every release before the shared layout kept the database:
+    /// `<data>/digger/history.db`, lowercase and outside the Colony directory
+    /// the rest of the ecosystem nests under.
+    fn legacy_db_path() -> Option<PathBuf> {
+        Some(dirs::data_local_dir()?.join("digger").join("history.db"))
+    }
+
+    /// Carry an existing history across to the shared layout, once.
+    ///
+    /// Copying rather than renaming: a user who downgrades still has their
+    /// history, and a failure half-way leaves the original untouched. The cost
+    /// is one duplicate of a database that prunes itself to a day by default,
+    /// and the log line says where it is so it can be deleted.
+    ///
+    /// The `-wal` and `-shm` sidecars come along because the database runs in
+    /// WAL mode: the newest samples may live in the write-ahead log rather than
+    /// the main file, and copying only the latter would silently drop them.
+    /// Nothing has the database open at this point — `open` calls this before
+    /// connecting.
+    fn migrate_legacy_db(target: &Path) {
+        let Some(legacy) = Self::legacy_db_path() else {
+            return;
+        };
+        carry_over(&legacy, target);
     }
 
     /// Returns true if the history backend is operational.
@@ -383,6 +415,51 @@ impl History {
     }
 }
 
+/// A sibling path with a suffix appended to the file name: `db` -> `db-wal`.
+///
+/// Built on the `OsStr` rather than `display()`, which is lossy: a home
+/// directory is allowed to hold bytes that are not UTF-8, and a lossy round
+/// trip would produce a path that does not exist.
+fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
+/// The copy itself, taking both paths so it can be tested without reaching into
+/// the real user directories. Does nothing unless there is a legacy database
+/// and no new one — running twice must not overwrite live history.
+fn carry_over(legacy: &Path, target: &Path) {
+    if target.exists() || legacy == target || !legacy.exists() {
+        return;
+    }
+
+    for suffix in SQLITE_PARTS {
+        let from = with_suffix(legacy, suffix);
+        if !from.exists() {
+            continue;
+        }
+        if let Err(e) = std::fs::copy(&from, with_suffix(target, suffix)) {
+            eprintln!(
+                "[digger] Could not carry {} over to the shared layout: {e}",
+                from.display()
+            );
+            // A partial copy is worse than none: a main file without its WAL
+            // reads as a database missing its most recent samples.
+            for suffix in SQLITE_PARTS {
+                let _ = std::fs::remove_file(with_suffix(target, suffix));
+            }
+            return;
+        }
+    }
+
+    eprintln!(
+        "[digger] History copied to {}. The original is still at {} and can be deleted.",
+        target.display(),
+        legacy.display()
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -521,5 +598,97 @@ mod tests {
         };
         assert!(!db.is_available());
         assert!(db.load_range(0.0, 1000.0).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+
+    fn write(path: &Path, body: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, body).unwrap();
+    }
+
+    #[test]
+    fn a_legacy_database_is_carried_over_with_its_wal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = tmp.path().join("digger/history.db");
+        let target = tmp.path().join("Colony/Digger/history.db");
+        write(&legacy, "main");
+        write(&with_suffix(&legacy, "-wal"), "log");
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+
+        carry_over(&legacy, &target);
+
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "main");
+        assert_eq!(
+            std::fs::read_to_string(with_suffix(&target, "-wal")).unwrap(),
+            "log",
+            "the WAL holds the newest samples and has to come along"
+        );
+        assert!(legacy.exists(), "the original must survive the migration");
+    }
+
+    /// The one that would lose data: a second run must not overwrite a history
+    /// the user has been accumulating since the migration.
+    #[test]
+    fn an_existing_history_is_never_overwritten() {
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = tmp.path().join("digger/history.db");
+        let target = tmp.path().join("Colony/Digger/history.db");
+        write(&legacy, "old");
+        write(&target, "current");
+
+        carry_over(&legacy, &target);
+
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "current");
+    }
+
+    #[test]
+    fn a_first_run_with_nothing_to_carry_is_a_no_op() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("Colony/Digger/history.db");
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+
+        carry_over(&tmp.path().join("digger/history.db"), &target);
+
+        assert!(!target.exists(), "nothing should have been created");
+    }
+
+    /// Guards the degenerate case where the legacy and shared layouts resolve
+    /// to the same file — copying a file onto itself truncates it.
+    #[test]
+    fn a_database_is_not_copied_over_itself() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("history.db");
+        write(&path, "data");
+
+        carry_over(&path, &path);
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "data");
+    }
+
+    /// The layout the rest of the ecosystem uses. Digger's own storage nests
+    /// under Colony/Digger; before this it sat in a lowercase `digger` beside
+    /// it, which no other program would have found.
+    #[test]
+    fn digger_stores_its_data_under_the_colony_tree() {
+        for path in [
+            History::db_path(),
+            crate::preferences::Preferences::config_dir_for_test(),
+        ] {
+            let tail: Vec<_> = path
+                .components()
+                .rev()
+                .take(3)
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect();
+            assert!(
+                tail.contains(&"Colony".to_string()) && tail.contains(&"Digger".to_string()),
+                "{} is outside the Colony tree",
+                path.display()
+            );
+        }
     }
 }

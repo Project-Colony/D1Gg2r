@@ -14,6 +14,11 @@ mod ui;
 
 use ui::Digger;
 
+/// The program's name as it appears in the Colony filesystem tree:
+/// `<config>/Colony/Digger/`, `<data>/Colony/Digger/`, `<cache>/Colony/Digger/`.
+/// Capitalised, because the layout is shared with the launcher's own listing.
+pub const PROGRAM: &str = "Digger";
+
 // ─── Iosevka Nerd Font (default Latin/symbols) ─────────────────────
 pub const NERD_FONT_BYTES: &[u8] =
     include_bytes!("ui/assets/fonts/IosevkaNerdFont/IosevkaNerdFontPropo-Regular.ttf");

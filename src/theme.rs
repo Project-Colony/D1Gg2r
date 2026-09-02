@@ -90,6 +90,34 @@ impl ThemeVariant {
         ThemeVariant::KanagawaDragon,
     ];
 
+    /// The catalog keys this variant names in colony-ui.
+    ///
+    /// Digger's eleven themes are four of the shared families, and the palettes
+    /// were copies of the shared ones. This is the whole of the mapping.
+    pub fn keys(&self) -> (&'static str, &'static str) {
+        match self {
+            ThemeVariant::CatppuccinLatte => ("catppuccin", "latte"),
+            ThemeVariant::CatppuccinFrappe => ("catppuccin", "frappe"),
+            ThemeVariant::CatppuccinMacchiato => ("catppuccin", "macchiato"),
+            ThemeVariant::CatppuccinMocha => ("catppuccin", "mocha"),
+            ThemeVariant::GruvboxLight => ("gruvbox", "light"),
+            ThemeVariant::GruvboxDark => ("gruvbox", "dark"),
+            ThemeVariant::EverblushLight => ("everblush", "light"),
+            ThemeVariant::EverblushDark => ("everblush", "dark"),
+            ThemeVariant::KanagawaLight => ("kanagawa", "light"),
+            ThemeVariant::KanagawaDark => ("kanagawa", "dark"),
+            ThemeVariant::KanagawaDragon => ("kanagawa", "dragon"),
+        }
+    }
+
+    pub fn family_key(&self) -> &'static str {
+        self.keys().0
+    }
+
+    pub fn variant_key(&self) -> &'static str {
+        self.keys().1
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             ThemeVariant::CatppuccinLatte => "Latte",
@@ -131,6 +159,66 @@ impl ThemeVariant {
     }
 }
 
+// ─── LEGIBILITY ─────────────────────────────────────────────────
+
+/// WCAG relative luminance.
+fn luminance(c: Color) -> f32 {
+    fn channel(v: f32) -> f32 {
+        if v <= 0.03928 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    }
+    0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
+}
+
+/// WCAG contrast ratio, 1.0 (identical) to 21.0 (black on white).
+fn contrast(a: Color, b: Color) -> f32 {
+    let (la, lb) = (luminance(a), luminance(b));
+    let (hi, lo) = if la > lb { (la, lb) } else { (lb, la) };
+    (hi + 0.05) / (lo + 0.05)
+}
+
+/// The floor for a chart line or a coloured status label: WCAG's non-text
+/// contrast minimum.
+const MIN_SERIES_CONTRAST: f32 = 3.0;
+
+/// Keep a series colour's hue, move its lightness until it is actually visible.
+///
+/// The shared palette picks hues that tell series apart from *each other*.
+/// Reading against the paper is a different job, and on the light themes the
+/// shared palette loses it badly — `warning` on Kanagawa journal is 1.65:1, a
+/// yellow line on parchment. Digger draws these as one-pixel sparklines and as
+/// small status text, so both surfaces have to clear the floor: a colour tuned
+/// only against the window background still disappears on a card.
+///
+/// Blending toward black preserves hue exactly; toward white it desaturates,
+/// which is the lesser evil on a dark theme where there is no room downward.
+fn readable_on(color: Color, bg: Color, panel: Color) -> Color {
+    let clears = |c: Color| {
+        contrast(c, bg) >= MIN_SERIES_CONTRAST && contrast(c, panel) >= MIN_SERIES_CONTRAST
+    };
+    if clears(color) {
+        return color;
+    }
+    let target = if luminance(bg) > 0.5 { 0.0 } else { 1.0 };
+    let mut best = color;
+    for step in 1..=64 {
+        let t = step as f32 / 64.0;
+        best = Color {
+            r: color.r + (target - color.r) * t,
+            g: color.g + (target - color.g) * t,
+            b: color.b + (target - color.b) * t,
+            a: color.a,
+        };
+        if clears(best) {
+            break;
+        }
+    }
+    best
+}
+
 // ─── PALETTE ────────────────────────────────────────────────────
 
 /// All semantic colors the app uses, derived from theme + accent.
@@ -157,214 +245,178 @@ pub struct Palette {
 pub fn build_palette(theme: ThemeVariant, accent: AccentColor) -> Palette {
     let base = base_palette(theme);
     Palette {
-        accent: accent.color(),
+        // The accent is a chart line like any other, and the user can pick a
+        // pale one on a pale theme.
+        accent: readable_on(accent.color(), base.bg, base.panel_bg),
         ..base
     }
 }
 
+/// Derive Digger's fifteen roles from the shared thirty-eight.
+///
+/// Twelve map onto a shared role that means the same thing. Three do not:
+/// `cyan`, `magenta` and `blue` are *series* colours — they identify one line on
+/// a chart against another — and the shared palette has no such vocabulary. They
+/// come from the shared accent overrides instead, which are fixed hues chosen to
+/// be distinguishable from each other. That makes a series keep its identity
+/// across themes, and it is the reason they are not simply mapped onto
+/// accent_icon and accent_progress: on most themes those two are the same
+/// colour, which would have quietly turned two chart lines into one.
 fn base_palette(theme: ThemeVariant) -> Palette {
-    match theme {
-        // ── Catppuccin Latte ──
-        ThemeVariant::CatppuccinLatte => Palette {
-            bg: hex(0xef, 0xf1, 0xf5),
-            panel_bg: hex(0xe6, 0xe9, 0xef),
-            sidebar_bg: hex(0xdc, 0xe0, 0xe8),
-            border: hex(0xcc, 0xd0, 0xda),
-            grid: Color::from_rgba(0.0, 0.0, 0.0, 0.06),
-            label: hex(0x6c, 0x6f, 0x85),
-            text: hex(0x4c, 0x4f, 0x69),
-            bar_bg: hex(0xcc, 0xd0, 0xda),
-            accent: hex(0x89, 0xb4, 0xfa), // placeholder, overridden
-            green: hex(0x40, 0xa0, 0x2b),
-            red: hex(0xd2, 0x0f, 0x39),
-            yellow: hex(0xdf, 0x8e, 0x1d),
-            cyan: hex(0x04, 0xa5, 0xe5),
-            magenta: hex(0x88, 0x39, 0xef),
-            blue: hex(0x1e, 0x66, 0xf5),
+    let p = colony_ui::resolve(theme.family_key(), theme.variant_key());
+    let series = |key: &str| colony_ui::accent_key_to_color(key).unwrap_or(p.accent_blue);
+    let legible = |c: Color| readable_on(c, p.bg_primary, p.bg_card);
+    Palette {
+        bg: p.bg_primary,
+        panel_bg: p.bg_card,
+        sidebar_bg: p.bg_sidebar,
+        border: p.border_subtle,
+        // A hairline over the chart area rather than a palette entry: it has to
+        // read against whatever the theme's background is, so it is the ink at
+        // low alpha rather than a colour of its own.
+        grid: Color {
+            a: 0.06,
+            ..p.text_primary
         },
-        // ── Catppuccin Frappé ──
-        ThemeVariant::CatppuccinFrappe => Palette {
-            bg: hex(0x30, 0x34, 0x46),
-            panel_bg: hex(0x29, 0x2c, 0x3c),
-            sidebar_bg: hex(0x23, 0x26, 0x34),
-            border: hex(0x41, 0x45, 0x59),
-            grid: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
-            label: hex(0xa5, 0xad, 0xce),
-            text: hex(0xc6, 0xd0, 0xf5),
-            bar_bg: hex(0x41, 0x45, 0x59),
-            accent: hex(0x8c, 0xaa, 0xee),
-            green: hex(0xa6, 0xd1, 0x89),
-            red: hex(0xe7, 0x82, 0x84),
-            yellow: hex(0xe5, 0xc8, 0x90),
-            cyan: hex(0x81, 0xc8, 0xbe),
-            magenta: hex(0xca, 0x9e, 0xe6),
-            blue: hex(0x8c, 0xaa, 0xee),
-        },
-        // ── Catppuccin Macchiato ──
-        ThemeVariant::CatppuccinMacchiato => Palette {
-            bg: hex(0x24, 0x27, 0x3a),
-            panel_bg: hex(0x1e, 0x20, 0x30),
-            sidebar_bg: hex(0x18, 0x1a, 0x26),
-            border: hex(0x36, 0x3a, 0x4f),
-            grid: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
-            label: hex(0xa5, 0xad, 0xcb),
-            text: hex(0xca, 0xd3, 0xf5),
-            bar_bg: hex(0x36, 0x3a, 0x4f),
-            accent: hex(0x8a, 0xad, 0xf4),
-            green: hex(0xa6, 0xda, 0x95),
-            red: hex(0xed, 0x87, 0x96),
-            yellow: hex(0xee, 0xd4, 0x9f),
-            cyan: hex(0x8b, 0xd5, 0xca),
-            magenta: hex(0xc6, 0xa0, 0xf6),
-            blue: hex(0x8a, 0xad, 0xf4),
-        },
-        // ── Catppuccin Mocha ──
-        ThemeVariant::CatppuccinMocha => Palette {
-            bg: hex(0x1e, 0x1e, 0x2e),
-            panel_bg: hex(0x18, 0x18, 0x25),
-            sidebar_bg: hex(0x11, 0x11, 0x1b),
-            border: hex(0x31, 0x32, 0x44),
-            grid: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
-            label: hex(0xa6, 0xad, 0xc8),
-            text: hex(0xcd, 0xd6, 0xf4),
-            bar_bg: hex(0x31, 0x32, 0x44),
-            accent: hex(0x89, 0xb4, 0xfa),
-            green: hex(0xa6, 0xe3, 0xa1),
-            red: hex(0xf3, 0x8b, 0xa8),
-            yellow: hex(0xf9, 0xe2, 0xaf),
-            cyan: hex(0x94, 0xe2, 0xd5),
-            magenta: hex(0xcb, 0xa6, 0xf7),
-            blue: hex(0x89, 0xb4, 0xfa),
-        },
-        // ── Gruvbox Dark ──
-        ThemeVariant::GruvboxDark => Palette {
-            bg: hex(0x28, 0x28, 0x28),
-            panel_bg: hex(0x1d, 0x20, 0x21),
-            sidebar_bg: hex(0x17, 0x19, 0x1a),
-            border: hex(0x3c, 0x38, 0x36),
-            grid: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
-            label: hex(0xa8, 0x99, 0x84),
-            text: hex(0xeb, 0xdb, 0xb2),
-            bar_bg: hex(0x3c, 0x38, 0x36),
-            accent: hex(0x83, 0xa5, 0x98),
-            green: hex(0xb8, 0xbb, 0x26),
-            red: hex(0xfb, 0x49, 0x34),
-            yellow: hex(0xfa, 0xbd, 0x2f),
-            cyan: hex(0x8e, 0xc0, 0x7c),
-            magenta: hex(0xd3, 0x86, 0x9b),
-            blue: hex(0x83, 0xa5, 0x98),
-        },
-        // ── Gruvbox Light ──
-        ThemeVariant::GruvboxLight => Palette {
-            bg: hex(0xfb, 0xf1, 0xc7),
-            panel_bg: hex(0xf2, 0xe5, 0xbc),
-            sidebar_bg: hex(0xeb, 0xdb, 0xb2),
-            border: hex(0xd5, 0xc4, 0xa1),
-            grid: Color::from_rgba(0.0, 0.0, 0.0, 0.06),
-            label: hex(0x66, 0x5c, 0x54),
-            text: hex(0x3c, 0x38, 0x36),
-            bar_bg: hex(0xd5, 0xc4, 0xa1),
-            accent: hex(0x42, 0x7b, 0x58),
-            green: hex(0x79, 0x74, 0x0e),
-            red: hex(0x9d, 0x00, 0x06),
-            yellow: hex(0xb5, 0x76, 0x14),
-            cyan: hex(0x42, 0x7b, 0x58),
-            magenta: hex(0x8f, 0x3f, 0x71),
-            blue: hex(0x07, 0x66, 0x78),
-        },
-        // ── Everblush Dark ──
-        ThemeVariant::EverblushDark => Palette {
-            bg: hex(0x14, 0x17, 0x1f),
-            panel_bg: hex(0x1a, 0x1e, 0x28),
-            sidebar_bg: hex(0x10, 0x13, 0x1a),
-            border: hex(0x2c, 0x31, 0x3d),
-            grid: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
-            label: hex(0x6e, 0x78, 0x8a),
-            text: hex(0xda, 0xdf, 0xe7),
-            bar_bg: hex(0x2c, 0x31, 0x3d),
-            accent: hex(0x67, 0xb0, 0xe8),
-            green: hex(0x8c, 0xd0, 0x81),
-            red: hex(0xe0, 0x6e, 0x6e),
-            yellow: hex(0xf1, 0xc1, 0x7b),
-            cyan: hex(0x67, 0xb0, 0xe8),
-            magenta: hex(0xc2, 0x8f, 0xd0),
-            blue: hex(0x67, 0xb0, 0xe8),
-        },
-        // ── Everblush Light ──
-        ThemeVariant::EverblushLight => Palette {
-            bg: hex(0xf0, 0xf0, 0xf0),
-            panel_bg: hex(0xe5, 0xe5, 0xe8),
-            sidebar_bg: hex(0xdb, 0xdb, 0xe0),
-            border: hex(0xc8, 0xc8, 0xd0),
-            grid: Color::from_rgba(0.0, 0.0, 0.0, 0.06),
-            label: hex(0x6e, 0x72, 0x80),
-            text: hex(0x2e, 0x32, 0x3a),
-            bar_bg: hex(0xc8, 0xc8, 0xd0),
-            accent: hex(0x3a, 0x8a, 0xc0),
-            green: hex(0x50, 0x99, 0x46),
-            red: hex(0xc0, 0x3e, 0x3e),
-            yellow: hex(0xb8, 0x8b, 0x30),
-            cyan: hex(0x3a, 0x8a, 0xc0),
-            magenta: hex(0x90, 0x55, 0xa2),
-            blue: hex(0x3a, 0x6a, 0xb5),
-        },
-        // ── Kanagawa Wave (dark) ──
-        ThemeVariant::KanagawaDark => Palette {
-            bg: hex(0x1f, 0x1f, 0x28),
-            panel_bg: hex(0x16, 0x16, 0x1d),
-            sidebar_bg: hex(0x10, 0x10, 0x16),
-            border: hex(0x36, 0x36, 0x46),
-            grid: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
-            label: hex(0x72, 0x73, 0x8c),
-            text: hex(0xdc, 0xd7, 0xba),
-            bar_bg: hex(0x36, 0x36, 0x46),
-            accent: hex(0x7e, 0x79, 0x6b),
-            green: hex(0x98, 0xbb, 0x6c),
-            red: hex(0xc3, 0x46, 0x43),
-            yellow: hex(0xdb, 0xa4, 0x5a),
-            cyan: hex(0x7f, 0xb4, 0xca),
-            magenta: hex(0x95, 0x7f, 0xb8),
-            blue: hex(0x7e, 0x9c, 0xd8),
-        },
-        // ── Kanagawa Dragon ──
-        ThemeVariant::KanagawaDragon => Palette {
-            bg: hex(0x18, 0x16, 0x16),
-            panel_bg: hex(0x12, 0x10, 0x10),
-            sidebar_bg: hex(0x0d, 0x0c, 0x0c),
-            border: hex(0x2d, 0x2a, 0x2a),
-            grid: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
-            label: hex(0x73, 0x71, 0x67),
-            text: hex(0xc5, 0xc9, 0xc5),
-            bar_bg: hex(0x2d, 0x2a, 0x2a),
-            accent: hex(0x8b, 0xa4, 0xb0),
-            green: hex(0x87, 0xa9, 0x87),
-            red: hex(0xc4, 0x74, 0x6e),
-            yellow: hex(0xc4, 0xb2, 0x8a),
-            cyan: hex(0x8b, 0xa4, 0xb0),
-            magenta: hex(0xa2, 0x92, 0xa3),
-            blue: hex(0x8b, 0xa4, 0xb0),
-        },
-        // ── Kanagawa Lotus (light) ──
-        ThemeVariant::KanagawaLight => Palette {
-            bg: hex(0xf2, 0xec, 0xbc),
-            panel_bg: hex(0xe7, 0xe1, 0xb0),
-            sidebar_bg: hex(0xdc, 0xd5, 0xa5),
-            border: hex(0xc7, 0xc0, 0x92),
-            grid: Color::from_rgba(0.0, 0.0, 0.0, 0.06),
-            label: hex(0x71, 0x6e, 0x61),
-            text: hex(0x54, 0x54, 0x64),
-            bar_bg: hex(0xc7, 0xc0, 0x92),
-            accent: hex(0x62, 0x4c, 0x83),
-            green: hex(0x6f, 0x89, 0x4e),
-            red: hex(0xc8, 0x46, 0x48),
-            yellow: hex(0x77, 0x71, 0x3a),
-            cyan: hex(0x6c, 0x78, 0x2e),
-            magenta: hex(0x62, 0x4c, 0x83),
-            blue: hex(0x4d, 0x69, 0x9b),
-        },
+        label: p.text_muted,
+        text: p.text_primary,
+        bar_bg: p.bg_progress,
+        // Replaced by build_palette with the user's chosen accent.
+        accent: p.accent_blue,
+        green: legible(p.success),
+        red: legible(p.error),
+        yellow: legible(p.warning),
+        cyan: legible(series("blue")),
+        magenta: legible(series("violet")),
+        blue: legible(series("indigo")),
     }
 }
 
-const fn hex(r: u8, g: u8, b: u8) -> Color {
-    Color::from_rgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
+#[cfg(test)]
+mod shared_palette_tests {
+    use super::*;
+
+    /// colony_ui::resolve falls back to Gruvbox Dark for a pair it does not
+    /// recognise, so a wrong mapping would not fail — every theme would quietly
+    /// become Gruvbox Dark. Check each against the catalog instead.
+    #[test]
+    fn every_variant_names_a_real_catalog_entry() {
+        for variant in ThemeVariant::ALL {
+            let (family, name) = variant.keys();
+            let found = colony_ui::THEME_FAMILIES
+                .iter()
+                .find(|f| f.key == family)
+                .and_then(|f| f.variant(name));
+            assert!(
+                found.is_some(),
+                "{variant:?} maps to ({family}, {name}), absent from the catalog"
+            );
+        }
+    }
+
+    #[test]
+    fn distinct_variants_stay_distinct() {
+        let mut seen = std::collections::BTreeSet::new();
+        for variant in ThemeVariant::ALL {
+            assert!(
+                seen.insert(variant.keys()),
+                "{variant:?} duplicates another"
+            );
+        }
+    }
+
+    /// is_light() is Digger's own list; the catalog records the same fact.
+    /// They must agree, or a light theme gets dark-theme treatment somewhere.
+    #[test]
+    fn the_light_dark_split_agrees_with_the_catalog() {
+        for variant in ThemeVariant::ALL {
+            let (family, name) = variant.keys();
+            let mode = colony_ui::THEME_FAMILIES
+                .iter()
+                .find(|f| f.key == family)
+                .and_then(|f| f.variant(name))
+                .map(|v| v.mode)
+                .expect("catalog entry");
+            assert_eq!(
+                variant.is_light(),
+                mode == "light",
+                "{variant:?}: Digger says light={}, the catalog says {mode}",
+                variant.is_light()
+            );
+        }
+    }
+
+    /// Two chart lines sharing a colour is the bug this mapping exists to
+    /// avoid — accent_icon and accent_progress are the same colour on most
+    /// themes, which is why the series colours do not come from them.
+    #[test]
+    fn the_three_series_colours_are_distinct_on_every_theme() {
+        for variant in ThemeVariant::ALL {
+            let p = base_palette(*variant);
+            let series = [p.cyan, p.magenta, p.blue];
+            for (i, a) in series.iter().enumerate() {
+                for b in series.iter().skip(i + 1) {
+                    assert_ne!(a, b, "{variant:?}: two chart series share a colour");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn catppuccin_latte_still_has_its_own_colours() {
+        let p = base_palette(ThemeVariant::CatppuccinLatte);
+        assert_eq!(p.bg, colony_ui::hex(0xeff1f5));
+        assert_eq!(p.text, colony_ui::hex(0x4c4f69));
+        assert_eq!(p.label, colony_ui::hex(0x6c6f85));
+    }
+
+    /// The regression this whole helper exists for. Before it, `warning` on
+    /// Kanagawa journal was 1.65:1 — a yellow sparkline on parchment. Every
+    /// series has to clear the floor on both surfaces it is drawn on, for every
+    /// theme and every accent the user can pick.
+    #[test]
+    fn every_series_colour_is_visible_on_every_theme_and_accent() {
+        let mut failures = Vec::new();
+        for variant in ThemeVariant::ALL {
+            for accent in AccentColor::ALL {
+                let p = build_palette(*variant, *accent);
+                let roles = [
+                    ("accent", p.accent),
+                    ("green", p.green),
+                    ("red", p.red),
+                    ("yellow", p.yellow),
+                    ("cyan", p.cyan),
+                    ("magenta", p.magenta),
+                    ("blue", p.blue),
+                ];
+                for (name, color) in roles {
+                    for (surface, bg) in [("bg", p.bg), ("panel", p.panel_bg)] {
+                        let ratio = contrast(color, bg);
+                        if ratio < MIN_SERIES_CONTRAST {
+                            failures.push(format!(
+                                "{variant:?}/{accent:?} {name} on {surface}: {ratio:.2}:1"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "series colours below {MIN_SERIES_CONTRAST}:1:\n  {}",
+            failures.join("\n  ")
+        );
+    }
+
+    /// A colour that already clears the floor must come back untouched — the
+    /// dark themes were fine before and must not be repainted.
+    #[test]
+    fn a_colour_that_already_passes_is_left_alone() {
+        let p = colony_ui::resolve("kanagawa", "dragon");
+        assert_eq!(
+            readable_on(p.success, p.bg_primary, p.bg_card),
+            p.success,
+            "Dragon's green passed at 6.9:1 and should not have moved"
+        );
+    }
 }
