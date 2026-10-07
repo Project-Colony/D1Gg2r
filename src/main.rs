@@ -118,6 +118,13 @@ pub const DYSLEXIC_FONT: iced::Font = iced::Font {
 };
 
 fn main() -> iced::Result {
+    // Answered before any window exists, so the release workflow can smoke-test
+    // the binary on a headless runner.
+    if std::env::args().any(|a| a == "--version") {
+        println!("digger {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     let icon =
         iced::window::icon::from_file_data(include_bytes!("../assets/icons/icon.png"), None).ok();
 
