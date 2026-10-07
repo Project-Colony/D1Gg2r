@@ -41,8 +41,16 @@ NVML is only used by builds made with `--features gpu`; the release binaries are
 
 The release binaries are not signed with an Apple or Microsoft certificate, so each OS warns on first launch. Colony installs them for you and checks the Project-Colony signature of every asset; the steps below are for running a binary downloaded by hand.
 
-- **Linux**: `chmod +x d1gg2r-linux`, then run it.
-- **macOS**: Gatekeeper blocks files downloaded from a browser. Clear the quarantine flag, then run it: `xattr -d com.apple.quarantine d1gg2r-macos && chmod +x d1gg2r-macos`. Use `d1gg2r-macos-x86` on Intel Macs.
+- **Linux**: `chmod +x d1gg2r-linux && ./d1gg2r-linux`
+- **macOS**: make it executable and clear the download quarantine flag, then run it:
+
+  ```bash
+  chmod +x d1gg2r-macos
+  xattr -d com.apple.quarantine d1gg2r-macos
+  ./d1gg2r-macos
+  ```
+
+  `xattr` reports "No such xattr" when the file was not quarantined, which is fine. Use `d1gg2r-macos-x86` on Intel Macs. If you skip the `xattr` step, macOS 15 and later block the first launch; allow it under **System Settings > Privacy & Security > Open Anyway**.
 - **Windows**: SmartScreen shows "Windows protected your PC". Click **More info**, then **Run anyway**.
 
 ## Screenshots
