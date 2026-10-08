@@ -155,6 +155,8 @@ jobs:
       # Uncomment once SignPath has approved this project and its project
       # exists in the Project-Colony SignPath organisation:
       # signpath-project-slug: "d1gg2r"
+      # Its product name must be "Digger", the ProductName build.rs gives the
+      # exe (the README title), although the repository and colony.json say D1Gg2r.
     # Named, not `inherit`: the called workflow gets these two and nothing else.
     secrets:
       COLONY_SIGNING_KEY_PEM: ${{ secrets.COLONY_SIGNING_KEY_PEM }}
