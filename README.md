@@ -61,6 +61,23 @@ The release binaries are not signed with an Apple or Microsoft certificate, so e
 
 Build instructions, architecture details, and configuration reference are in the [`docs/`](docs/) folder.
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+Windows builds are signed this way once the SignPath Foundation has accepted the project; until then they ship without Authenticode. Every release asset, on every platform, is always signed with the Project-Colony organisation's ed25519 key, which Colony verifies before installing it.
+
+Team roles and members:
+
+- Committers and reviewers: [MotherSphere](https://github.com/MotherSphere)
+- Approvers: [MotherSphere](https://github.com/MotherSphere)
+
+## Privacy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
+Digger has no telemetry and never connects to a server: the metrics it reads, and the history it keeps in a local SQLite database, stay on your machine.
+
 ## License
 
 Digger is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. The full text is in [LICENSE](LICENSE).
