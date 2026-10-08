@@ -65,7 +65,7 @@ Build instructions, architecture details, and configuration reference are in the
 
 Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
-Windows builds are signed this way once the SignPath Foundation has accepted the project; until then they ship without Authenticode. Every release asset, on every platform, is always signed with the Project-Colony organisation's ed25519 key, which Colony verifies before installing it.
+Windows builds are signed this way once the SignPath Foundation has accepted the project; until then they ship without Authenticode. Since v0.2.1, every release asset, on every platform, is signed with the Project-Colony organisation's ed25519 key, which Colony verifies before installing it.
 
 Team roles and members:
 
