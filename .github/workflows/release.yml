@@ -114,7 +114,8 @@ jobs:
           $info = (Get-Item target\${{ matrix.target }}\release\digger.exe).VersionInfo
           $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages[0].version
           "ProductName '$($info.ProductName)', ProductVersion '$($info.ProductVersion)'"
-          if ($info.ProductName -ne 'Digger' -or $info.ProductVersion -ne $version) {
+          # -cne: -ne ignores case, so winres's default 'digger' would pass.
+          if ($info.ProductName -cne 'Digger' -or $info.ProductVersion -ne $version) {
             "::error::digger.exe must carry ProductName 'Digger' and ProductVersion '$version'"
             exit 1
           }
