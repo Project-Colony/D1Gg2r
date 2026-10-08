@@ -1,18 +1,30 @@
 name: Release
 
+# The build legs only build and upload artifacts; they never see a key.
+# Authenticode (SignPath, once approved), the ed25519 signatures, verification
+# and publishing all happen in the shared sign-and-publish workflow of
+# Project-Colony-Resources, in this same run. See design/releases.md there,
+# section "Shared signing workflow".
+
 on:
   push:
     branches: [main]
+  # Recovery path: finish an existing DRAFT release whose run failed. Start it
+  # from the tag (`gh workflow run release.yml --ref v0.4.0 -f tag=v0.4.0`):
+  # with SignPath on, sign-and-publish refuses a run whose commit is not the
+  # tag's. Without a tag it only builds and smoke-tests.
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to rebuild assets for (leave empty for a build-only smoke run)"
+        description: "Existing draft release to build, sign and publish, run from that same tag (leave empty for a build-only smoke run)"
         required: false
         type: string
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -21,22 +33,38 @@ jobs:
   release-please:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # No `release-type` input: when it is set, the action ignores both files.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
-          release-type: rust
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # release-please publishes the release before any binary exists. Held as
+      # a draft; sign-and-publish refuses anything else and publishes it last.
+      - name: Hold the release as a draft
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --draft=true
 
   build:
     name: Build ${{ matrix.asset }}
     needs: release-please
-    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && !failure() && (needs.release-please.outputs.release_created || github.event_name == 'workflow_dispatch') }}
+    # GitHub-hosted runners only: SignPath rejects a signing request if any
+    # job leading to it ran on a self-hosted runner.
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -55,17 +83,19 @@ jobs:
             asset: d1gg2r-macos-x86
 
     steps:
+      # The tag, not the branch: the .meta sidecar binds these bytes to that
+      # version. Empty on a build-only dispatch, which builds the dispatched ref.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable branch
         with:
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: ${{ matrix.target }}
+      # No build cache here: SignPath forbids release builds that reuse
+      # outputs of earlier, unverified builds.
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
@@ -76,6 +106,20 @@ jobs:
         if: runner.os == 'Linux'
         run: ./target/${{ matrix.target }}/release/digger --version
 
+      # SignPath checks the signed file's metadata: ProductName must be the
+      # project name and ProductVersion the release. build.rs sets both.
+      - name: Check the version info (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $info = (Get-Item target\${{ matrix.target }}\release\digger.exe).VersionInfo
+          $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages[0].version
+          "ProductName '$($info.ProductName)', ProductVersion '$($info.ProductVersion)'"
+          # -cne: -ne ignores case, so winres's default 'digger' would pass.
+          if ($info.ProductName -cne 'Digger' -or $info.ProductVersion -ne $version) {
+            "::error::digger.exe must carry ProductName 'Digger' and ProductVersion '$version'"
+            exit 1
+          }
+
       - name: Stage binary (Unix)
         if: runner.os != 'Windows'
         run: cp target/${{ matrix.target }}/release/digger ${{ matrix.asset }}
@@ -84,60 +128,36 @@ jobs:
         if: runner.os == 'Windows'
         run: copy target\${{ matrix.target }}\release\digger.exe ${{ matrix.asset }}
 
-      - name: Upload binary to GitHub Release
-        if: ${{ github.event_name == 'push' || inputs.tag != '' }}
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+      # The file at the artifact root, under its release name. The name
+      # prefix is what `artifact-pattern` below matches.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
-          files: ${{ matrix.asset }}
+          name: build-${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 1
 
-  # Sign every release asset with the Project-Colony org key (ed25519).
-  # Colony >= 0.8.0 verifies these signatures on install and REFUSES a
-  # tampered asset; the job fails the release if the secret is missing so
-  # an unsigned release cannot ship silently.
-  sign:
-    name: Sign release assets
+  # Every asset gets its .sig, .meta and .meta.sig from the Project-Colony org
+  # key (ed25519) over its final bytes; Colony verifies them on install and
+  # refuses a tampered asset. Skipped on a build-only dispatch.
+  sign-and-publish:
     needs: [release-please, build]
-    if: ${{ needs.release-please.outputs.release_created }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download release binaries
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
-        run: |
-          mkdir dist
-          gh release download "$TAG" -R "${{ github.repository }}" --dir dist
-          # Metadata companions are not signable assets.
-          rm -f dist/*.sig dist/*.sha256 dist/*.txt dist/*.yml dist/*.json dist/*.asc
-
-      - name: Sign
-        env:
-          KEY: ${{ secrets.COLONY_SIGNING_KEY_PEM }}
-        run: |
-          if [ -z "$KEY" ]; then
-            echo "::error::COLONY_SIGNING_KEY_PEM is not available - the release would ship unsigned."
-            exit 1
-          fi
-          printf '%s' "$KEY" > /tmp/key.pem
-          chmod 600 /tmp/key.pem
-          pub=$(mktemp)
-          openssl pkey -in /tmp/key.pem -pubout -out "$pub"
-          for f in dist/*; do
-            openssl pkeyutl -sign -inkey /tmp/key.pem -rawin -in "$f" -out "$f.sig"
-            openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in "$f" -sigfile "$f.sig" >/dev/null
-            echo "signed $(basename "$f")"
-          done
-          rm -f /tmp/key.pem
-
-      - name: Upload signatures
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
-        # -R is not optional here. This job has no `actions/checkout`, so there
-        # is no git repository for `gh` to infer the target from, and it dies
-        # with "not a git repository" AFTER the assets have been signed. The
-        # download step above already passes it; this one was missed, and the
-        # release shipped unsigned while the job that was meant to prevent
-        # exactly that reported the failure too late to stop it.
-        run: gh release upload "$TAG" -R "${{ github.repository }}" dist/*.sig --clobber
+    if: ${{ !cancelled() && needs.build.result == 'success' && (needs.release-please.outputs.tag_name || inputs.tag) }}
+    # The ceiling for every job in the called workflow.
+    permissions:
+      actions: read
+      contents: write
+    uses: Project-Colony/Project-Colony-Resources/.github/workflows/sign-and-publish.yml@619460ff4dc0049f129955f0988d368427b9eedb # main
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      assets: "d1gg2r-linux d1gg2r-windows.exe d1gg2r-macos d1gg2r-macos-x86"
+      artifact-pattern: build-*
+      # Uncomment once SignPath has approved this project and its project
+      # exists in the Project-Colony SignPath organisation:
+      # signpath-project-slug: "d1gg2r"
+      # Its product name must be "Digger", the ProductName build.rs gives the
+      # exe (the README title), although the repository and colony.json say D1Gg2r.
+    # Named, not `inherit`: the called workflow gets these two and nothing else.
+    secrets:
+      COLONY_SIGNING_KEY_PEM: ${{ secrets.COLONY_SIGNING_KEY_PEM }}
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
