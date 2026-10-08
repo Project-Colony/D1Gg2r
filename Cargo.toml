@@ -33,7 +33,9 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Threading",
 ] }
 
-[target.'cfg(windows)'.build-dependencies]
+# Unconditional: build.rs decides on the target, and build dependencies are
+# resolved for the host.
+[build-dependencies]
 winres = "0.1"
 
 [features]
