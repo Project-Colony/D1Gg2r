@@ -300,7 +300,8 @@ fn load_desktop_cache() -> Option<HashSet<String>> {
 #[cfg(target_os = "windows")]
 fn get_windowed_pids() -> HashSet<u32> {
     use std::sync::Mutex;
-    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows_sys::core::BOOL;
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
     };
