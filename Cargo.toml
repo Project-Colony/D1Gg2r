@@ -25,7 +25,7 @@ notify-rust = "4"
 nvml-wrapper = { version = "0.10", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-wmi = "0.15"
+wmi = "0.18"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
