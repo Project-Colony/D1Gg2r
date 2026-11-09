@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/Project-Colony/D1Gg2r/compare/v0.3.0...v0.3.1) (2026-11-09)
+
+
+### Fixes
+
+* **deps:** update dependencies and Rust to 1.99 and fix the open security advisories ([#39](https://github.com/Project-Colony/D1Gg2r/issues/39)) ([8d1f831](https://github.com/Project-Colony/D1Gg2r/commit/8d1f8316d8275c3baf69f71281b753700b6c1702))
+
 ## [0.3.0](https://github.com/Project-Colony/D1Gg2r/compare/v0.2.1...v0.3.0) (2026-09-02)
 
 
