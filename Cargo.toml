@@ -9,24 +9,25 @@ repository = "https://github.com/Project-Colony/D1Gg2r"
 keywords = ["system-monitor", "sysinfo", "gui", "iced"]
 categories = ["command-line-utilities", "os"]
 readme = "README.md"
+rust-version = "1.99"
 
 [dependencies]
 # Shared palettes, accents, labels and the Colony/<Program>/ filesystem layout.
-colony-ui = "0.1.5"
+colony-ui = "0.1.6"
 iced = { version = "0.14.0", features = ["canvas", "tokio", "image"] }
 sysinfo = "0.39.6"
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 chrono = "0.4.45"
-dirs = "6.0.0"
-libc = "0.2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-notify-rust = "4"
-nvml-wrapper = { version = "0.10", optional = true }
+dirs = "7.0.0"
+libc = "0.2.191"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+notify-rust = "4.19.0"
+nvml-wrapper = { version = "0.10.0", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-wmi = "0.15"
-windows-sys = { version = "0.61", features = [
+wmi = "0.15.2"
+windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Security",
@@ -36,7 +37,7 @@ windows-sys = { version = "0.61", features = [
 # Unconditional: build.rs decides on the target, and build dependencies are
 # resolved for the host.
 [build-dependencies]
-winres = "0.1"
+winres = "0.1.12"
 
 [features]
 default = []

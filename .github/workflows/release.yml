@@ -90,7 +90,7 @@ jobs:
           ref: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable branch
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch
         with:
           targets: ${{ matrix.target }}
 
@@ -130,7 +130,7 @@ jobs:
 
       # The file at the artifact root, under its release name. The name
       # prefix is what `artifact-pattern` below matches.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-${{ matrix.asset }}
           path: ${{ matrix.asset }}
@@ -147,7 +147,7 @@ jobs:
     permissions:
       actions: read
       contents: write
-    uses: Project-Colony/Project-Colony-Resources/.github/workflows/sign-and-publish.yml@619460ff4dc0049f129955f0988d368427b9eedb # main
+    uses: Project-Colony/Project-Colony-Resources/.github/workflows/sign-and-publish.yml@1973616f4deb2182855decf446d8e2d78ad7aa29 # main
     with:
       tag: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
       assets: "d1gg2r-linux d1gg2r-windows.exe d1gg2r-macos d1gg2r-macos-x86"
