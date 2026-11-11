@@ -15,7 +15,7 @@ rust-version = "1.99"
 # Shared palettes, accents, labels and the Colony/<Program>/ filesystem layout.
 colony-ui = "0.1.6"
 iced = { version = "0.14.0", features = ["canvas", "tokio", "image"] }
-sysinfo = "0.39.6"
+sysinfo = "0.40.1"
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 chrono = "0.4.45"
 dirs = "7.0.0"
