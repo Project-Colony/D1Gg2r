@@ -147,7 +147,7 @@ jobs:
     permissions:
       actions: read
       contents: write
-    uses: Project-Colony/Project-Colony-Resources/.github/workflows/sign-and-publish.yml@1973616f4deb2182855decf446d8e2d78ad7aa29 # main
+    uses: Project-Colony/Project-Colony-Resources/.github/workflows/sign-and-publish.yml@73ff1f78612456586b190ae091a22dce2ba00f7f # main
     with:
       tag: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
       assets: "d1gg2r-linux d1gg2r-windows.exe d1gg2r-macos d1gg2r-macos-x86"
