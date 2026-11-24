@@ -14,6 +14,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # The shared signing workflow stays at the organisation pin, which moves
+    # for every program at once: design/releases.md in
+    # Project-Colony-Resources, "The pin". Dependabot names that dependency
+    # after the workflow path, so the rule needs the trailing wildcard.
+    ignore:
+      - dependency-name: "Project-Colony/Project-Colony-Resources*"
     groups:
       actions-minor:
         update-types: ["minor", "patch"]
