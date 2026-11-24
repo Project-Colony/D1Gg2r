@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/Project-Colony/D1Gg2r/compare/v0.3.1...v0.3.2) (2026-11-24)
+
+
+### Fixes
+
+* **deps:** update dependencies and Rust to 1.100 ([#46](https://github.com/Project-Colony/D1Gg2r/issues/46)) ([b741635](https://github.com/Project-Colony/D1Gg2r/commit/b741635c0d7f01714ede9a624abdd5806f38e558))
+
 ## [0.3.1](https://github.com/Project-Colony/D1Gg2r/compare/v0.3.0...v0.3.1) (2026-11-09)
 
 
