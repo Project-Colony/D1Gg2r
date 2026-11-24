@@ -546,7 +546,10 @@ fn get_system_pids(procs: &[(u32, String, String)]) -> HashSet<u32> {
 
 impl Collector {
     pub fn with_process_limit(limit: usize) -> Self {
-        let mut sys = System::new_all();
+        // sysinfo 0.40 constructors return Result, but only fail with
+        // Unsupported on targets Digger does not build for (iOS, the
+        // apple-sandbox feature): Linux, Windows and macOS always get Ok.
+        let mut sys = System::new_all().expect("sysinfo supports this platform");
         sys.refresh_all();
 
         // Try cached desktop names first, fall back to scanning
@@ -557,13 +560,13 @@ impl Collector {
         });
 
         let sys_info = Arc::new(SystemInfo {
-            os_name: System::name().unwrap_or_else(|| "Unknown".into()),
-            os_version: System::os_version().unwrap_or_else(|| "Unknown".into()),
-            kernel_version: System::kernel_version().unwrap_or_else(|| "Unknown".into()),
-            hostname: System::host_name().unwrap_or_else(|| "Unknown".into()),
+            os_name: System::name().unwrap_or_else(|_| "Unknown".into()),
+            os_version: System::os_version().unwrap_or_else(|_| "Unknown".into()),
+            kernel_version: System::kernel_version().unwrap_or_else(|_| "Unknown".into()),
+            hostname: System::host_name().unwrap_or_else(|_| "Unknown".into()),
         });
 
-        let disks = Disks::new_with_refreshed_list();
+        let disks = Disks::new_with_refreshed_list().expect("sysinfo supports this platform");
         let cached_disks = disks
             .iter()
             .map(|d| DiskInfo {
@@ -579,8 +582,9 @@ impl Collector {
         Self {
             sys,
             disks,
-            networks: Networks::new_with_refreshed_list(),
-            components: Components::new_with_refreshed_list(),
+            networks: Networks::new_with_refreshed_list().expect("sysinfo supports this platform"),
+            components: Components::new_with_refreshed_list()
+                .expect("sysinfo supports this platform"),
             desktop_app_names,
             process_limit: limit,
             sys_info,
@@ -598,7 +602,7 @@ impl Collector {
         let cpu_refresh = if self.tick_count.is_multiple_of(10) {
             CpuRefreshKind::everything()
         } else {
-            CpuRefreshKind::nothing().with_cpu_usage()
+            CpuRefreshKind::nothing().with_usage()
         };
 
         // Opt #1: Only refresh process fields we need (cpu, memory, disk usage).
@@ -645,7 +649,7 @@ impl Collector {
             }
         }
 
-        let cpu_usage_per_core: Vec<f32> = self.sys.cpus().iter().map(|c| c.cpu_usage()).collect();
+        let cpu_usage_per_core: Vec<f32> = self.sys.cpus().iter().map(|c| c.usage()).collect();
         let cpu_usage_global = if cpu_usage_per_core.is_empty() {
             0.0
         } else {
@@ -658,7 +662,7 @@ impl Collector {
             rx += data.received();
             tx += data.transmitted();
             net_interfaces.push(NetIfaceInfo {
-                name: name.clone(),
+                name: name.to_string_lossy().into_owned(),
                 rx_bytes: data.received(),
                 tx_bytes: data.transmitted(),
             });
@@ -700,7 +704,7 @@ impl Collector {
             .values()
             .filter(|p| p.thread_kind().is_none())
             .count();
-        let uptime_secs = System::uptime();
+        let uptime_secs = System::uptime().unwrap_or(0);
 
         // Opt #2: Pre-build thread count map in O(n) instead of O(n²).
         let mut thread_counts: HashMap<sysinfo::Pid, u32> = HashMap::new();
@@ -932,17 +936,28 @@ fn collect_wmi_temperatures() -> Vec<TempInfo> {
     cached.unwrap_or_default()
 }
 
+/// Join the multithreaded COM apartment on the calling thread without setting
+/// the process security context, as `wmi::COMLibrary::without_security()` did
+/// before wmi 0.18 removed it. CoInitializeSecurity is process-wide and
+/// winit/iced may have already called it on the UI thread; with COM already
+/// initialized here, wmi 0.18 does not call it either. COM is not
+/// uninitialized afterwards, which is what COMLibrary did too.
+#[cfg(target_os = "windows")]
+pub(crate) fn init_com_without_security() -> bool {
+    use windows_sys::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+    // SAFETY: plain FFI call with a null reserved pointer; S_OK and S_FALSE
+    // (already initialized in this mode) are both non-negative.
+    unsafe { CoInitializeEx(std::ptr::null(), COINIT_MULTITHREADED as u32) >= 0 }
+}
+
 #[cfg(target_os = "windows")]
 fn collect_wmi_temperatures_native() -> Vec<TempInfo> {
     use std::collections::HashMap;
-    use wmi::{COMLibrary, Variant, WMIConnection};
+    use wmi::{Variant, WMIConnection};
 
-    // Use without_security() because CoInitializeSecurity is process-wide
-    // and winit/iced may have already called it on the UI thread.
-    let com_lib = match COMLibrary::without_security() {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
-    };
+    if !init_com_without_security() {
+        return Vec::new();
+    }
 
     // Helper: extract f64 from common WMI Variant types
     fn variant_f64(v: &Variant) -> Option<f64> {
@@ -969,7 +984,7 @@ fn collect_wmi_temperatures_native() -> Vec<TempInfo> {
 
     // 1. Try LibreHardwareMonitor / OpenHardwareMonitor (all sensors)
     for ns in &["ROOT\\LibreHardwareMonitor", "ROOT\\OpenHardwareMonitor"] {
-        if let Ok(con) = WMIConnection::with_namespace_path(ns, com_lib) {
+        if let Ok(con) = WMIConnection::with_namespace_path(ns) {
             if let Ok(results) = con.raw_query::<HashMap<String, Variant>>(
                 "SELECT Name, SensorType, Value FROM Sensor WHERE SensorType = 'Temperature'",
             ) {
@@ -995,7 +1010,7 @@ fn collect_wmi_temperatures_native() -> Vec<TempInfo> {
 
     // 2. Thermal zone performance counters (Kelvin → Celsius, no admin)
     //    Use raw_query for maximum compatibility across Windows versions.
-    if let Ok(con) = WMIConnection::new(com_lib) {
+    if let Ok(con) = WMIConnection::new() {
         if let Ok(results) = con.raw_query::<HashMap<String, Variant>>(
             "SELECT Name, Temperature FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation",
         ) {
@@ -1029,7 +1044,7 @@ fn collect_wmi_temperatures_native() -> Vec<TempInfo> {
     }
 
     // 3. ACPI thermal zones (requires admin, ROOT\WMI namespace)
-    if let Ok(con) = WMIConnection::with_namespace_path("ROOT\\WMI", com_lib) {
+    if let Ok(con) = WMIConnection::with_namespace_path("ROOT\\WMI") {
         if let Ok(results) = con.raw_query::<HashMap<String, Variant>>(
             "SELECT InstanceName, CurrentTemperature FROM MSAcpi_ThermalZoneTemperature",
         ) {

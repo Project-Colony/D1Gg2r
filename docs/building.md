@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Rust 1.99+ (edition 2021)
+- Rust 1.100+ (edition 2021)
 - System libraries for your platform
 
 ### Debian / Ubuntu

@@ -9,14 +9,22 @@ repository = "https://github.com/Project-Colony/D1Gg2r"
 keywords = ["system-monitor", "sysinfo", "gui", "iced"]
 categories = ["command-line-utilities", "os"]
 readme = "README.md"
-rust-version = "1.99"
+rust-version = "1.100"
 
 [dependencies]
 # Shared palettes, accents, labels and the Colony/<Program>/ filesystem layout.
 colony-ui = "0.1.6"
 iced = { version = "0.14.0", features = ["canvas", "tokio", "image"] }
-sysinfo = "0.39.6"
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+# The feature list is sysinfo 0.39's default set. 0.40 adds "gpu" to the
+# defaults, which makes refresh_all() also query per-process GPU usage.
+sysinfo = { version = "0.40.4", default-features = false, features = [
+    "component",
+    "disk",
+    "network",
+    "system",
+    "user",
+] }
+rusqlite = { version = "0.43.0", features = ["bundled"] }
 chrono = "0.4.45"
 dirs = "7.0.0"
 libc = "0.2.191"
@@ -26,12 +34,13 @@ notify-rust = "4.19.0"
 nvml-wrapper = { version = "0.10.0", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-wmi = "0.15.2"
+wmi = "0.18.4"
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Security",
     "Win32_System_Threading",
+    "Win32_System_Com",
 ] }
 
 # Unconditional: build.rs decides on the target, and build dependencies are

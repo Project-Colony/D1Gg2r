@@ -599,17 +599,16 @@ fn collect_wmi_gpu() -> GpuSnapshot {
 fn collect_wmi_gpu_native() -> Vec<GpuInfo> {
     use serde::Deserialize;
     use std::collections::HashMap;
-    use wmi::{COMLibrary, Variant, WMIConnection};
+    use wmi::{Variant, WMIConnection};
 
-    // Use without_security() because CoInitializeSecurity is process-wide
-    // and winit/iced may have already called it on the UI thread.
-    let com_lib = match COMLibrary::without_security() {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
-    };
+    // Without CoInitializeSecurity: it is process-wide and winit/iced may have
+    // already called it on the UI thread.
+    if !crate::metrics::init_com_without_security() {
+        return Vec::new();
+    }
 
     // 1. Get GPU name and adapter RAM from Win32_VideoController
-    let wmi_con = match WMIConnection::new(com_lib) {
+    let wmi_con = match WMIConnection::new() {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };
@@ -707,7 +706,7 @@ fn collect_wmi_gpu_native() -> Vec<GpuInfo> {
 #[cfg(target_os = "windows")]
 fn enrich_gpu_temps_wmi(default_con: &wmi::WMIConnection, gpus: &mut [GpuInfo]) {
     use std::collections::HashMap;
-    use wmi::{COMLibrary, Variant, WMIConnection};
+    use wmi::{Variant, WMIConnection};
 
     fn variant_f64(v: &Variant) -> Option<f64> {
         match v {
@@ -723,14 +722,13 @@ fn enrich_gpu_temps_wmi(default_con: &wmi::WMIConnection, gpus: &mut [GpuInfo]) 
         }
     }
 
-    let com_lib = match COMLibrary::without_security() {
-        Ok(c) => c,
-        Err(_) => return,
-    };
+    if !crate::metrics::init_com_without_security() {
+        return;
+    }
 
     // 1. Try LibreHardwareMonitor / OpenHardwareMonitor
     for ns in &["ROOT\\LibreHardwareMonitor", "ROOT\\OpenHardwareMonitor"] {
-        if let Ok(con) = WMIConnection::with_namespace_path(ns, com_lib) {
+        if let Ok(con) = WMIConnection::with_namespace_path(ns) {
             if let Ok(results) = con.raw_query::<HashMap<String, Variant>>(
                 "SELECT Name, SensorType, Value FROM Sensor WHERE SensorType = 'Temperature'",
             ) {
