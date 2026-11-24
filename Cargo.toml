@@ -15,7 +15,15 @@ rust-version = "1.100"
 # Shared palettes, accents, labels and the Colony/<Program>/ filesystem layout.
 colony-ui = "0.1.6"
 iced = { version = "0.14.0", features = ["canvas", "tokio", "image"] }
-sysinfo = "0.40.4"
+# The feature list is sysinfo 0.39's default set. 0.40 adds "gpu" to the
+# defaults, which makes refresh_all() also query per-process GPU usage.
+sysinfo = { version = "0.40.4", default-features = false, features = [
+    "component",
+    "disk",
+    "network",
+    "system",
+    "user",
+] }
 rusqlite = { version = "0.43.0", features = ["bundled"] }
 chrono = "0.4.45"
 dirs = "7.0.0"
@@ -23,7 +31,7 @@ libc = "0.2.191"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 notify-rust = "4.19.0"
-nvml-wrapper = { version = "0.13.0", optional = true }
+nvml-wrapper = { version = "0.10.0", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 wmi = "0.18.4"
